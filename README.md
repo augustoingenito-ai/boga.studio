@@ -1,6 +1,6 @@
 # BOGA Studio · CRM
 
-Primera versión para una sola persona: clientes, historial manual de conversaciones, seguimiento, presupuestos de branding y diseño, bocetos adjuntos, cobros y tablero de trabajos.
+Primera versión para una sola persona: clientes, historial manual de conversaciones, seguimiento, presupuestos de branding, diseño y colección, bocetos adjuntos, cobros y tablero de trabajos.
 
 ## Desarrollo
 
@@ -16,11 +16,11 @@ El servidor escucha en `127.0.0.1:3000`. `npm start` inicia sin recarga automát
 ## Flujo
 
 1. Crear un cliente y agregar etiquetas, datos de contacto y próximo seguimiento.
-2. Crear un presupuesto, elegir Branding o Diseño, completar servicios, cantidades, precios y condiciones. El total se calcula en el servidor.
+2. Crear un presupuesto, elegir Branding, Diseño o Diseño de colección y completar servicios, cantidades, precios y condiciones. Los precios unitarios negativos restan del subtotal; las cantidades deben ser positivas. En colección se pregunta primero si hubo asesoría y cuánto se cobró, y se ingresa manualmente la cantidad de tipologías. La asesoría se descuenta una sola vez del subtotal, sin registrarse como cobro del nuevo presupuesto. El servidor calcula y valida el total neto.
 3. Adjuntar un boceto (PDF, PNG, JPEG o WebP, hasta 5 MB). Se guarda junto al presupuesto; puede descargarse desde su vista PDF.
 4. Registrar el envío manualmente cambiando el estado a Enviado. Esto no envía mensajes.
 5. Aprobar el presupuesto, registrar lo cobrado y crear el trabajo desde `+ Trabajo`. Cambiar sus etapas en el tablero.
-6. Usar PDF para ver la plantilla original completa. Descargar PDF final entrega el documento listo para enviar; Descargar PDF editable conserva campos rellenables. Branding usa las 12 páginas apaisadas originales; Diseño usa la página vertical original, con continuaciones si hay más de dos servicios. Cronograma, cliente, fechas, servicios e importes se completan desde el CRM. Las condiciones particulares y observaciones se agregan en un anexo. Ver [templates/README.md](templates/README.md).
+6. Usar PDF para ver la plantilla original completa. Descargar PDF final entrega el documento listo para enviar; Descargar PDF editable conserva campos rellenables. Branding mantiene sus 12 páginas apaisadas y sus anexos opcionales. Diseño y Diseño de colección se descargan en una sola hoja: la tabla de Diseño se adapta para tres o más servicios y colección muestra el detalle compacto, las tipologías, el subtotal, el descuento por asesoría y el total. Si el contenido excede una hoja legible, la app pide acortarlo o agrupar servicios antes de descargar. Ver [templates/README.md](templates/README.md).
 7. Registrar conversaciones manuales desde la ficha del cliente. Los recordatorios se muestran dentro de la app; no hay notificaciones externas.
 
 Las métricas abarcan todos los registros, sin filtro de período. Los importes se expresan en ARS. Un cliente puede tener múltiples presupuestos y trabajos. El importe cobrado es un acumulado editable, no un libro contable de transacciones.

@@ -1,18 +1,27 @@
 import { PDFDocument, PDFName, TextAlignment, layoutMultilineText, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'node:fs';
-import { designTerms, brandTerms } from './public/quote-defaults.js';
-const original={Diseño:readFileSync(new URL('./templates/design.pdf',import.meta.url)),Branding:readFileSync(new URL('./templates/branding.pdf',import.meta.url))};
+import { designTerms, brandTerms, collectionTerms } from './public/quote-defaults.js';
+import {quoteTotals,collectionType} from './public/quote-totals.js';
+const original={Diseño:readFileSync(new URL('./templates/design.pdf',import.meta.url)),Branding:readFileSync(new URL('./templates/branding.pdf',import.meta.url)),[collectionType]:readFileSync(new URL('./templates/collection.pdf',import.meta.url))};
+const variants=Object.fromEntries(['design-grid','design-terms','design-grid-terms','collection-terms'].map(name=>[name,readFileSync(new URL('./templates/'+name+'.pdf',import.meta.url))]));
 const fontBytes=readFileSync(new URL('./templates/Poppins-Regular.ttf',import.meta.url));
 const ink=rgb(35/255,31/255,32/255),white=rgb(246/255,243/255,233/255),green=rgb(56/255,172/255,98/255),pink=rgb(241/255,200/255,216/255);
 const cash=n=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',minimumFractionDigits:0,maximumFractionDigits:2}).format(n||0).replace(/\u00a0/g,' ');
 const clean=v=>String(v??'').replace(/\r\n/g,'\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
 const date=v=>v&&/^\d{4}-\d{2}-\d{2}$/.test(v)?v.split('-').reverse().join('/'):clean(v);
 export async function quotePDF(q,client,{editable=false}={}){
- if(!original[q.type])throw Object.assign(new Error('Seleccioná Branding o Diseño.'),{status:400});
+ if(!original[q.type])throw Object.assign(new Error('Seleccioná una plantilla de presupuesto válida.'),{status:400});
+ q={...q,...quoteTotals(q)};
+ const singlePage=q.type!=='Branding';
+ const expectedTerms=q.type==='Branding'?brandTerms:q.type===collectionType?collectionTerms:designTerms;
+ const customTerms=!!(q.terms&&q.terms!==expectedTerms),compactNotes=!!(q.schedule||q.description);
+ let source=original[q.type];
+ if(q.type==='Diseño'){const grid=q.items.length>2,terms=customTerms||compactNotes;if(grid||terms)source=variants['design'+(grid?'-grid':'')+(terms?'-terms':'')];}
+ if(q.type===collectionType&&customTerms)source=variants['collection-terms'];
  const pdf=await PDFDocument.create();pdf.registerFontkit(fontkit);
- const template=await PDFDocument.load(original[q.type]);
- const copies=q.type==='Diseño'?Math.max(1,Math.ceil(q.items.length/2)):1;
+ const template=await PDFDocument.load(source);
+ const copies=1;
  for(let i=0;i<copies;i++)for(const page of await pdf.copyPages(template,template.getPageIndices()))pdf.addPage(page);
  const font=await pdf.embedFont(fontBytes,{subset:false});
  const form=pdf.getForm(),fields=new Map(),annex=[];
@@ -21,7 +30,7 @@ export async function quotePDF(q,client,{editable=false}={}){
  const charset=new Set(font.getCharacterSet());
  const validateText=text=>{for(const char of text)if(char!=='\n'&&!charset.has(char.codePointAt(0)))throw Object.assign(new Error('El presupuesto contiene caracteres que Poppins no puede representar (por ejemplo emojis). Revisá los datos antes de descargar.'),{status:422});};
  function field(page,name,value,x,top,width,height,{size=12,min=8,color=ink,align=TextAlignment.Left,multiline=false,maxChars=0,overflowTitle='Detalle completo'}={}){
-  const fullText=clean(value);let text=fullText,overflowed=false;validateText(text);const overflow=()=>{if(!overflowed){annex.push([overflowTitle,fullText]);overflowed=true;}};
+  const fullText=clean(value);let text=fullText,overflowed=false;validateText(text);const overflow=()=>{if(singlePage)throw Object.assign(new Error('La información no entra en una hoja con tamaño legible. Acortá las descripciones o agrupá servicios y volvé a descargar.'),{status:422});if(!overflowed){annex.push([overflowTitle,fullText]);overflowed=true;}};
   if(maxChars&&text.length>maxChars){overflow();text=text.slice(0,maxChars-20)+'… (ver anexo)';}
   let actual=size;
   const longest=Math.max(0,...text.split('\n').map(t=>font.widthOfTextAtSize(t,actual)));
@@ -32,23 +41,43 @@ export async function quotePDF(q,client,{editable=false}={}){
   return f;
  }
  if(q.type==='Diseño'){
-  const pages=pdf.getPages();
-  for(let n=0;n<pages.length;n++){
-   const p=pages[n];
-   field(p,'cliente',client.name,113,44,330,28,{size:16});
-   field(p,'fecha',date(q.date),113,70,310,27,{size:16});
-   field(p,'validez',q.validityText||date(q.validUntil),113,95,310,27,{size:16});
-   field(p,'referencia',q.number,39,746,370,19,{size:10});
-   q.items.slice(n*2,n*2+2).forEach((item,row)=>{
-    const top=row===0?303:344,index=n*2+row;
-    field(p,`servicio_${index+1}`,item.service,42,top,300,35,{size:11,multiline:true,maxChars:130,overflowTitle:`Servicio ${index+1}`});
-    field(p,`cantidad_${index+1}`,String(item.quantity),352,top,75,35,{size:13,align:TextAlignment.Center});
-    field(p,`precio_unitario_${index+1}`,cash(item.price),437,top,115,35,{size:12,min:8,align:TextAlignment.Right});
-   });
-   if(n===pages.length-1)field(p,'total',cash(q.total),43,447,506,33,{size:22,align:TextAlignment.Right});
-   else field(p,`continuacion_${n+1}`,'Continúa en la siguiente página',43,447,506,33,{size:12,align:TextAlignment.Right});
-   if(pages.length>1)field(p,`pagina_${n+1}`,`${n+1} / ${pages.length}`,467,487,85,16,{size:8,align:TextAlignment.Right});
+  const p=pdf.getPage(0);
+  field(p,'cliente',client.name,113,44,330,28,{size:16});
+  field(p,'fecha',date(q.date),113,70,310,27,{size:16});
+  field(p,'validez',q.validityText||date(q.validUntil),113,95,310,27,{size:16});
+  field(p,'referencia',q.number,39,746,370,19,{size:10});
+  const dynamic=q.items.length>2,bodyTop=300.1,bodyBottom=dynamic?400:381.5;
+  const rows=Math.max(2,q.items.length),rowHeight=(bodyBottom-bodyTop)/rows;
+  if(dynamic){
+   const line=(x1,y1,x2,y2)=>p.drawLine({start:{x:x1,y:p.getHeight()-y1},end:{x:x2,y:p.getHeight()-y2},thickness:1,color:rgb(0,0,0),opacity:.3});
+   line(35.3,259.8,557.4,259.8);line(35.3,bodyBottom,557.4,bodyBottom);
+   for(const x of [35.3,347.9,432.6,557.4])line(x,259.8,x,bodyBottom);
+   line(35.3,bodyTop,557.4,bodyTop);
+   for(let i=1;i<rows;i++)line(35.3,bodyTop+i*rowHeight,557.4,bodyTop+i*rowHeight);
   }
+  const textSize=dynamic?Math.min(11,(rowHeight-3)/(font.heightAtSize(1)*1.2)):11;
+  if(textSize<6.5)throw Object.assign(new Error('Hay demasiados servicios para una hoja legible. Agrupá algunos servicios antes de descargar.'),{status:422});
+  q.items.forEach((item,index)=>{
+   const top=bodyTop+index*rowHeight+1,height=rowHeight-2;
+   field(p,`servicio_${index+1}`,item.service,42,top,300,height,{size:textSize,min:6.5,multiline:true,overflowTitle:`Servicio ${index+1}`});
+   field(p,`cantidad_${index+1}`,String(item.quantity),352,top,75,height,{size:dynamic?textSize:13,min:6.5,align:TextAlignment.Center});
+   field(p,`precio_unitario_${index+1}`,cash(item.price),437,top,115,height,{size:dynamic?textSize:12,min:6.5,align:TextAlignment.Right});
+  });
+  field(p,'total',cash(q.total),43,447,506,33,{size:22,align:TextAlignment.Right});
+  if(customTerms||compactNotes){const parts=[q.terms||designTerms];if(q.schedule)parts.push('Cronograma y adicionales: '+q.schedule);if(q.description)parts.push('Observaciones: '+q.description);field(p,'condiciones_y_notas',parts.join('\n\n'),39,530,518,178,{size:9,min:7,multiline:true});}
+ }else if(q.type===collectionType){
+  const p=pdf.getPage(0);
+  field(p,'cliente',client.name,99,39,320,24,{size:14});
+  field(p,'fecha',date(q.date),99,61,320,23,{size:14});
+  field(p,'validez',q.validityText||date(q.validUntil),99,82,320,23,{size:14});
+  field(p,'tipologias',String(q.collectionTypologies||''),154,169,26,22,{size:12,min:8,align:TextAlignment.Center});
+  field(p,'subtotal',cash(q.subtotal),288,589,254,29,{size:18,align:TextAlignment.Right});
+  field(p,'descuento_asesoria',cash(-q.consultationDiscount),288,617,254,27,{size:18,align:TextAlignment.Right});
+  field(p,'total',cash(q.total),288,645,254,28,{size:20,align:TextAlignment.Right});
+  field(p,'referencia',q.number,32,754,190,20,{size:9});
+  if(customTerms)field(p,'condiciones_particulares',q.terms,51,702,510,22,{size:9,min:7,multiline:true});
+  const serviceSummary='Servicios: '+q.items.map(i=>`${i.service} (${i.quantity} × ${cash(i.price)})`).join('; ');
+  field(p,'servicios_y_notas',[serviceSummary,q.schedule,q.description].filter(Boolean).join('\n'),49,545,500,36,{size:8,min:6.5,multiline:true});
  }else{
   const p=pdf.getPage(0);
   field(p,'cliente',client.name,48,365,560,33,{size:22,color:green});
@@ -61,10 +90,9 @@ export async function quotePDF(q,client,{editable=false}={}){
   const investment=q.items.map(i=>`${i.service} · ${i.quantity} × ${cash(i.price)}`).join('\n');
   field(pdf.getPage(9),'servicios','Servicios incluidos en este presupuesto:\n\n'+investment,536,330,262,210,{size:11,color:pink,multiline:true,maxChars:700,overflowTitle:'Detalle de servicios'});
  }
- const expectedTerms=q.type==='Diseño'?designTerms:brandTerms;
- if(q.terms&&q.terms!==expectedTerms)annex.push(['Condiciones particulares',q.terms]);
- if(q.schedule)annex.push(['Cronograma y adicionales',q.schedule]);
- if(q.description)annex.push(['Observaciones del proyecto',q.description]);
+ if(!singlePage&&q.terms&&q.terms!==expectedTerms)annex.push(['Condiciones particulares',q.terms]);
+ if(!singlePage&&q.schedule)annex.push(['Cronograma y adicionales',q.schedule]);
+ if(!singlePage&&q.description)annex.push(['Observaciones del proyecto',q.description]);
  if(annex.length){
   const [w,h]=q.type==='Diseño'?[595.276,841.89]:[841.89,595.276];
   let page,top;

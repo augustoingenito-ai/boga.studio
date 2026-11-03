@@ -12,10 +12,10 @@ test('plantillas originales: tamaños, doce páginas branding y PDF rellenable c
   const final=await PDFDocument.load((await quotePDF({...base,type,terms},{name:'María Núñez'})).bytes);expect(final.getForm().getFields()).toHaveLength(0);expect(final.getPageCount()).toBe(pages);for(const page of final.getPages())for(const ref of page.node.Annots()?.asArray()||[])expect(final.context.lookup(ref)).toBeDefined();
  }
 });
-test('diseño: cuatro servicios usan continuación sin perder filas ni repetir el total',async()=>{
- const q={...base,type:'Diseño',terms:designTerms,items:Array.from({length:4},(_,i)=>({service:'Servicio '+(i+1),quantity:1,price:50000}))};const pdf=await PDFDocument.load((await quotePDF(q,{name:'Cliente'},{editable:true})).bytes);expect(pdf.getPageCount()).toBe(2);const form=pdf.getForm();expect(form.getTextField('servicio_4').getText()).toBe('Servicio 4');expect(form.getTextField('total').acroField.getWidgets()).toHaveLength(1);expect(form.getTextField('cliente').acroField.getWidgets()).toHaveLength(2);
+test('diseño: cuatro servicios se descargan en una hoja sin perder filas',async()=>{
+ const q={...base,type:'Diseño',terms:designTerms,items:Array.from({length:4},(_,i)=>({service:'Servicio '+(i+1),quantity:1,price:50000}))};const pdf=await PDFDocument.load((await quotePDF(q,{name:'Cliente'},{editable:true})).bytes);expect(pdf.getPageCount()).toBe(1);const form=pdf.getForm();expect(form.getTextField('servicio_4').getText()).toBe('Servicio 4');expect(form.getTextField('total').acroField.getWidgets()).toHaveLength(1);expect(form.getTextField('cliente').acroField.getWidgets()).toHaveLength(1);
 });
-test('texto extenso y condiciones particulares se conservan en anexos editables',async()=>{
- const text='Condición personalizada con ñ y acentos. '.repeat(110);const pdf=await PDFDocument.load((await quotePDF({...base,type:'Diseño',terms:text,description:'Nota importante',items:[{service:'Descripción de servicio extensa. '.repeat(30),quantity:2,price:100000}]},{name:'Cliente'},{editable:true})).bytes);
- expect(pdf.getPageCount()).toBeGreaterThan(1);const fields=pdf.getForm().getFields().filter(f=>f.getName().startsWith('anexo_')).map(f=>f.getText()).join('\n');expect(fields).toContain('Nota importante');expect(fields.replace(/\s+/g,' ').trim()).toContain(text.replace(/\s+/g,' ').trim());expect(fields).toContain('Descripción de servicio extensa.');
+test('branding conserva los anexos para contenido extenso',async()=>{
+ const text='Condición personalizada con ñ y acentos. '.repeat(110);const pdf=await PDFDocument.load((await quotePDF({...base,type:'Branding',terms:text,description:'Nota importante',items:[{service:'Descripción de servicio extensa. '.repeat(30),quantity:2,price:100000}]},{name:'Cliente'},{editable:true})).bytes);
+ expect(pdf.getPageCount()).toBeGreaterThan(12);const fields=pdf.getForm().getFields().filter(f=>f.getName().startsWith('anexo_')).map(f=>f.getText()).join('\n');expect(fields).toContain('Nota importante');expect(fields.replace(/\s+/g,' ').trim()).toContain(text.replace(/\s+/g,' ').trim());expect(fields).toContain('Descripción de servicio extensa.');
 });

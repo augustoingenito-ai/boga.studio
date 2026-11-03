@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { quotePDF } from './quote-pdf.js';
+import {quoteTotals,collectionType} from './public/quote-totals.js';
 import { createWhatsApp, whatsappKinds } from './whatsapp.js';
 import { createAuth } from './auth.js';
 import { createDatabase } from './database.js';
@@ -22,10 +23,17 @@ async function validate(k,v){
  if(k==='quotes'&&!String(v.title||'').trim())v.title=String(v.number||'').trim()||'Presupuesto de '+String(v.type||'').toLowerCase();
  if(k==='jobs'&&!String(v.title||'').trim())throw error('El título es obligatorio.');
  if(k==='quotes'){
- if(!['Branding','Diseño'].includes(v.type))throw error('Tipo de presupuesto inválido.');
+ if(!['Branding','Diseño',collectionType].includes(v.type))throw error('Tipo de presupuesto inválido.');
  if(!['Borrador','Enviado','Aprobado','Rechazado','Vencido'].includes(v.status))throw error('Estado inválido.');
- if(!Array.isArray(v.items)||!v.items.length||v.items.some(i=>!i.service?.trim()||!Number.isFinite(i.quantity)||i.quantity<=0||!Number.isFinite(i.price)||i.price<0))throw error('Revisá los servicios, cantidades y precios.');
- v.total=v.items.reduce((s,i)=>s+i.quantity*i.price,0);
+ if(!Array.isArray(v.items)||!v.items.length||v.items.some(i=>!i.service?.trim()||!Number.isFinite(i.quantity)||i.quantity<=0||!Number.isFinite(i.price)||Math.abs(i.price)>1e12))throw error('Revisá los servicios, cantidades y precios.');
+ if(v.type===collectionType){
+  if(typeof v.hadConsultation!=='boolean')throw error('Indicá si el cliente tuvo asesoría previa.');
+  if(!Number.isInteger(v.collectionTypologies)||v.collectionTypologies<1||v.collectionTypologies>9999)throw error('Ingresá una cantidad de tipologías entre 1 y 9999.');
+  if(v.hadConsultation&&(!Number.isFinite(v.consultationAmount)||v.consultationAmount<0))throw error('Ingresá el importe cobrado por la asesoría.');
+ }else{v.hadConsultation=false;v.consultationAmount=0;}
+ if(!v.hadConsultation)v.consultationAmount=0;
+ try{Object.assign(v,quoteTotals(v));}catch(e){throw error(e.message);}
+ if(v.total<0)throw error('Los descuentos superan el subtotal. El total del presupuesto no puede ser negativo.');
  if(!Number.isFinite(v.total))throw error('El importe total no es válido.');
  if(v.timeline!==undefined&&(!Array.isArray(v.timeline)||v.timeline.length>5||v.timeline.some(t=>typeof t!=='string'||t.length>250)))throw error('Revisá los cinco campos del cronograma.');
  if(!Number.isFinite(v.paid)||v.paid<0||v.paid>v.total)throw error('El cobro debe estar entre cero y el total.');
@@ -81,7 +89,7 @@ const server=http.createServer(async(req,res)=>{
  return send(id?200:201,await save(k,v));
  }
  if(/^\/fonts\/[a-z0-9-]+\.woff2$/.test(url.pathname)){const fp=path.join(root,'public',url.pathname);if(existsSync(fp)){res.writeHead(200,{'Content-Type':'font/woff2','Cache-Control':'public, max-age=86400'});return res.end(readFileSync(fp));}}
- const files={'/':'index.html','/login.js':'login.js','/brand/boga-logo.svg':'brand/boga-logo.svg','/quote-defaults.js':'quote-defaults.js','/icons.js':'icons.js','/app.js':'app.js','/style.css':'style.css'};const f=files[url.pathname];
+ const files={'/':'index.html','/login.js':'login.js','/brand/boga-logo.svg':'brand/boga-logo.svg','/quote-totals.js':'quote-totals.js','/quote-defaults.js':'quote-defaults.js','/icons.js':'icons.js','/app.js':'app.js','/style.css':'style.css'};const f=files[url.pathname];
  if(!f){res.writeHead(404);return res.end('No encontrado');}
  res.writeHead(200,{'Content-Type':f.endsWith('svg')?'image/svg+xml':f.endsWith('html')?'text/html; charset=utf-8':f.endsWith('css')?'text/css':'text/javascript','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});res.end(readFileSync(path.join(root,'public',f)));
  }catch(e){send(e.status||500,{error:e.status?e.message:'No se pudo guardar. Revisá el servidor.'});if(!e.status)console.error('Error interno de almacenamiento o servidor. Revisá la conexión y configuración.');}
