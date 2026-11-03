@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {PDFDocument} from 'pdf-lib';
+import {PDFDocument,decodePDFRawStream} from 'pdf-lib';
 import {readFile} from 'node:fs/promises';
 import {quoteTotals,collectionType} from '../public/quote-totals.js';
 import {quotePDF} from '../quote-pdf.js';
@@ -16,7 +16,7 @@ test('colección: pregunta previa, tipologías, importe negativo y descuento apl
  await page.getByRole('button',{name:'Guardar',exact:true}).click();await expect(page.locator('#modal')).not.toBeVisible();
  let q=(await (await request.get('/api/state')).json()).quotes.find(q=>q.number==='CO-001');expect(q).toMatchObject({type:collectionType,subtotal:1350000,consultationDiscount:150000,total:1200000,hadConsultation:true,collectionTypologies:8});expect(q.items).toHaveLength(4);
  const row=page.getByRole('row').filter({hasText:'CO-001'});await row.getByRole('button',{name:'Editar',exact:true}).click();await expect(page.locator('#collection-intake')).toHaveCount(0);await expect(page.getByLabel('Importe cobrado por asesoría (ARS)')).toHaveValue('150000');await page.getByRole('button',{name:'Guardar',exact:true}).click();await expect(page.locator('#modal')).not.toBeVisible();q=(await (await request.get('/api/state')).json()).quotes.find(item=>item.number==='CO-001');expect(q.total).toBe(1200000);
- await row.getByRole('button',{name:'PDF',exact:true}).click();const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Descargar PDF editable',exact:true}).click();const file=await downloadPromise;await file.saveAs('/tmp/boga-collection-ui.pdf');const pdf=await PDFDocument.load(await readFile('/tmp/boga-collection-ui.pdf'));expect(pdf.getPageCount()).toBe(1);expect(pdf.getForm().getTextField('tipologias').getText()).toBe('8');expect(pdf.getForm().getTextField('total').getText()).toBe('$ 1.200.000');expect(pdf.getForm().getTextField('descuento_asesoria').getText()).toBe('-$ 150.000');expect(pdf.getForm().getTextField('servicios_y_notas').getText()).toContain('Bonificación (1 × -$ 20.000)');
+ await row.getByRole('button',{name:'PDF',exact:true}).click();const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Descargar PDF editable',exact:true}).click();const file=await downloadPromise;await file.saveAs('/tmp/boga-collection-ui.pdf');const pdf=await PDFDocument.load(await readFile('/tmp/boga-collection-ui.pdf'));expect(pdf.getPageCount()).toBe(1);expect(pdf.getForm().getTextField('tipologias').getText()).toBe('8');expect(pdf.getForm().getTextField('total').getText()).toBe('$ 1.200.000');expect(pdf.getForm().getTextField('descuento_asesoria').getText()).toBe('-$ 150.000');expect(pdf.getForm().getFields().map(f=>f.getName())).not.toContain('servicios_y_notas');
 });
 test('cancelar la pregunta vuelve a diseño y una colección sin asesoría no pide importe',async({page,request})=>{
  await request.post('/api/clients',{data:{name:'Sin asesoría'}});await page.goto('/');await page.getByRole('button',{name:'Presupuestos',exact:true}).click();await page.getByRole('button',{name:'+ Nuevo presupuesto'}).click();await page.getByLabel('Plantilla').selectOption(collectionType);await page.locator('#collection-intake').getByRole('button',{name:'Cancelar',exact:true}).click();await expect(page.getByLabel('Plantilla')).toHaveValue('Diseño');await page.getByLabel('Plantilla').selectOption(collectionType);await page.getByLabel('¿El cliente tuvo asesoría previa?').selectOption('no');await expect(page.getByLabel('¿Cuánto le cobraste? (ARS)')).not.toBeVisible();await page.getByRole('button',{name:'Continuar con el presupuesto'}).click();await expect(page.getByLabel('Importe cobrado por asesoría (ARS)')).toBeDisabled();await expect(page.getByLabel('Importe cobrado por asesoría (ARS)')).toHaveValue('0');
@@ -31,4 +31,22 @@ test('servidor: importes firmados, validación de asesoría y total neto usado p
 test('centavos y PDF de diseño de 3 a 6 servicios mantienen una sola hoja',async()=>{
  expect(quoteTotals({type:collectionType,items:[{quantity:3,price:.1},{quantity:1,price:-.05}],hadConsultation:true,consultationAmount:.1})).toEqual({subtotal:.25,consultationDiscount:.1,total:.15});
  for(const count of [3,4,5,6]){const q={type:'Diseño',items:Array.from({length:count},(_,i)=>({service:'Servicio '+i,quantity:1,price:i===count-1?-100:10000})),terms:designTerms};const pdf=await PDFDocument.load((await quotePDF(q,{name:'Cliente'},{editable:true})).bytes);expect(pdf.getPageCount()).toBe(1);expect(pdf.getForm().getTextField('servicio_'+count).getText()).toBe('Servicio '+(count-1));}
+});
+test('colección: datos con tracking -40, importes alineados y colores solo en los números',async()=>{
+ const q={type:collectionType,items:[{service:'Diseño de Colección',quantity:8,price:45000}],hadConsultation:true,consultationAmount:40000,collectionTypologies:8,terms:collectionTerms};
+ const pdf=await PDFDocument.load((await quotePDF(q,{name:'Cliente'},{editable:true})).bytes),form=pdf.getForm();
+ const appearance=f=>Buffer.from(decodePDFRawStream(f.acroField.getWidgets()[0].getAppearances().normal).decode()).toString();
+ for(const f of form.getFields()){
+  const da=f.acroField.getDefaultAppearance(),size=Number(da.match(/([\d.]+) Tf/)[1]);
+  expect(da).toContain(`${size*-.04} Tc`);expect(appearance(f)).toContain(`${size*-.04} Tc`);
+ }
+ for(const [name,baseline,color] of [['subtotal',610.9154,'0 0 0 rg'],['descuento_asesoria',636.3998,'0.8274509803921568 0.1843137254901961 0.1843137254901961 rg'],['total',663.8841,'0.023529411764705882 0.6980392156862745 0.42745098039215684 rg']]){
+  const f=form.getTextField(name),widget=f.acroField.getWidgets()[0],ap=appearance(f),matrix=ap.match(/1 0 0 1 ([\d.]+) ([\d.]+) Tm/);
+  expect(f.acroField.getDefaultAppearance()).toContain(color);expect(ap).toContain(color);
+  expect(pdf.getPage(0).getHeight()-widget.getRectangle().y-Number(matrix[2])).toBeCloseTo(baseline,4);
+  expect(widget.getRectangle().x+widget.getRectangle().width).toBe(542);
+ }
+ expect(form.getFields().map(f=>f.getName())).not.toContain('servicios_y_notas');
+ const noted=await PDFDocument.load((await quotePDF({...q,description:'Nota del cliente'},{name:'Cliente'},{editable:true})).bytes);
+ expect(noted.getForm().getTextField('notas').getText()).toBe('Nota del cliente');
 });

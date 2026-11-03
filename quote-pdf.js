@@ -1,15 +1,17 @@
-import { PDFDocument, PDFName, TextAlignment, layoutMultilineText, rgb } from 'pdf-lib';
+import { PDFDocument, PDFName, TextAlignment, layoutMultilineText, layoutSinglelineText, drawTextField, setCharacterSpacing, setFillingColor, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'node:fs';
 import { designTerms, brandTerms, collectionTerms } from './public/quote-defaults.js';
 import {quoteTotals,collectionType} from './public/quote-totals.js';
 const original={Diseño:readFileSync(new URL('./templates/design.pdf',import.meta.url)),Branding:readFileSync(new URL('./templates/branding.pdf',import.meta.url)),[collectionType]:readFileSync(new URL('./templates/collection.pdf',import.meta.url))};
-const variants=Object.fromEntries(['design-grid','design-terms','design-grid-terms','collection-terms'].map(name=>[name,readFileSync(new URL('./templates/'+name+'.pdf',import.meta.url))]));
+const variants=Object.fromEntries(['design-grid','design-terms','design-grid-terms','collection-base','collection-terms'].map(name=>[name,readFileSync(new URL('./templates/'+name+'.pdf',import.meta.url))]));
 const fontBytes=readFileSync(new URL('./templates/Poppins-Regular.ttf',import.meta.url));
 const ink=rgb(35/255,31/255,32/255),white=rgb(246/255,243/255,233/255),green=rgb(56/255,172/255,98/255),pink=rgb(241/255,200/255,216/255);
 const cash=n=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',minimumFractionDigits:0,maximumFractionDigits:2}).format(n||0).replace(/\u00a0/g,' ');
 const clean=v=>String(v??'').replace(/\r\n/g,'\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
 const date=v=>v&&/^\d{4}-\d{2}-\d{2}$/.test(v)?v.split('-').reverse().join('/'):clean(v);
+// Illustrator tracking -40 = -40/1000 em, scaled with each field's font size.
+const tracking=-40/1000;
 export async function quotePDF(q,client,{editable=false}={}){
  if(!original[q.type])throw Object.assign(new Error('Seleccioná una plantilla de presupuesto válida.'),{status:400});
  q={...q,...quoteTotals(q)};
@@ -18,26 +20,29 @@ export async function quotePDF(q,client,{editable=false}={}){
  const customTerms=!!(q.terms&&q.terms!==expectedTerms),compactNotes=!!(q.schedule||q.description);
  let source=original[q.type];
  if(q.type==='Diseño'){const grid=q.items.length>2,terms=customTerms||compactNotes;if(grid||terms)source=variants['design'+(grid?'-grid':'')+(terms?'-terms':'')];}
- if(q.type===collectionType&&customTerms)source=variants['collection-terms'];
+ if(q.type===collectionType)source=variants[customTerms?'collection-terms':'collection-base'];
  const pdf=await PDFDocument.create();pdf.registerFontkit(fontkit);
  const template=await PDFDocument.load(source);
  const copies=1;
  for(let i=0;i<copies;i++)for(const page of await pdf.copyPages(template,template.getPageIndices()))pdf.addPage(page);
  const font=await pdf.embedFont(fontBytes,{subset:false});
- const form=pdf.getForm(),fields=new Map(),annex=[];
+ const form=pdf.getForm(),fields=new Map(),styles=new Map(),annex=[];
+ const trackedFont=Object.create(font);
+ trackedFont.widthOfTextAtSize=(text,size)=>font.widthOfTextAtSize(text,size)+Math.max(0,font.encodeText(text).asBytes().length/2-1)*tracking*size;
  // Readers need the full font in AcroForm resources to edit names and prices later.
  form.acroForm.dict.set(PDFName.of('DR'),pdf.context.obj({Font:{[font.name]:font.ref}}));
  const charset=new Set(font.getCharacterSet());
  const validateText=text=>{for(const char of text)if(char!=='\n'&&!charset.has(char.codePointAt(0)))throw Object.assign(new Error('El presupuesto contiene caracteres que Poppins no puede representar (por ejemplo emojis). Revisá los datos antes de descargar.'),{status:422});};
- function field(page,name,value,x,top,width,height,{size=12,min=8,color=ink,align=TextAlignment.Left,multiline=false,maxChars=0,overflowTitle='Detalle completo'}={}){
+ function field(page,name,value,x,top,width,height,{size=12,min=8,color=ink,align=TextAlignment.Left,multiline=false,maxChars=0,overflowTitle='Detalle completo',baseline}={}){
   const fullText=clean(value);let text=fullText,overflowed=false;validateText(text);const overflow=()=>{if(singlePage)throw Object.assign(new Error('La información no entra en una hoja con tamaño legible. Acortá las descripciones o agrupá servicios y volvé a descargar.'),{status:422});if(!overflowed){annex.push([overflowTitle,fullText]);overflowed=true;}};
   if(maxChars&&text.length>maxChars){overflow();text=text.slice(0,maxChars-20)+'… (ver anexo)';}
   let actual=size;
-  const longest=Math.max(0,...text.split('\n').map(t=>font.widthOfTextAtSize(t,actual)));
-  if(!multiline&&longest>width-6){actual=Math.max(min,actual*(width-6)/longest);if(font.widthOfTextAtSize(text,actual)>width-6){overflow();while(text.length&&font.widthOfTextAtSize(text+'…',actual)>width-6)text=text.slice(0,-1);text+='…';}}
-  if(multiline){const fits=()=>layoutMultilineText(text,{alignment:align,font,fontSize:actual,bounds:{x:1,y:1,width:width-2,height:height-2}}).lines.every(l=>l.y>=0&&l.width<=width-2);while(actual>min&&!fits())actual=Math.max(min,actual-.5);if(!fits()){overflow();while(text.length&&!fits())text=text.slice(0,-1);text=text.slice(0,-18)+'… (ver anexo)';while(text.length>18&&!fits())text=text.slice(0,-19)+'… (ver anexo)';}}
+  const longest=Math.max(0,...text.split('\n').map(t=>trackedFont.widthOfTextAtSize(t,actual)));
+  if(!multiline&&longest>width-6){actual=Math.max(min,actual*(width-6)/longest);if(trackedFont.widthOfTextAtSize(text,actual)>width-6){overflow();while(text.length&&trackedFont.widthOfTextAtSize(text+'…',actual)>width-6)text=text.slice(0,-1);text+='…';}}
+  if(multiline){const fits=()=>layoutMultilineText(text,{alignment:align,font:trackedFont,fontSize:actual,bounds:{x:1,y:1,width:width-2,height:height-2}}).lines.every(l=>l.y>=0&&l.width<=width-2);while(actual>min&&!fits())actual=Math.max(min,actual-.5);if(!fits()){overflow();while(text.length&&!fits())text=text.slice(0,-1);text=text.slice(0,-18)+'… (ver anexo)';while(text.length>18&&!fits())text=text.slice(0,-19)+'… (ver anexo)';}}
   let f=fields.get(name);if(!f){f=form.createTextField(name);if(multiline)f.enableMultiline();f.setAlignment(align);f.setText(text);f.acroField.setDefaultAppearance(`/${font.name} ${actual} Tf 0 g`);f.setFontSize(actual);fields.set(name,f);}
   f.addToPage(page,{x,y:page.getHeight()-top-height,width,height,font,textColor:color,backgroundColor:undefined,borderColor:undefined,borderWidth:0});
+  styles.set(name,{size:actual,color,baseline:baseline===undefined?undefined:top+height-baseline});
   return f;
  }
  if(q.type==='Diseño'){
@@ -70,14 +75,13 @@ export async function quotePDF(q,client,{editable=false}={}){
   field(p,'cliente',client.name,99,39,320,24,{size:14});
   field(p,'fecha',date(q.date),99,61,320,23,{size:14});
   field(p,'validez',q.validityText||date(q.validUntil),99,82,320,23,{size:14});
-  field(p,'tipologias',String(q.collectionTypologies||''),154,169,26,22,{size:12,min:8,align:TextAlignment.Center});
-  field(p,'subtotal',cash(q.subtotal),288,589,254,29,{size:18,align:TextAlignment.Right});
-  field(p,'descuento_asesoria',cash(-q.consultationDiscount),288,617,254,27,{size:18,align:TextAlignment.Right});
-  field(p,'total',cash(q.total),288,645,254,28,{size:20,align:TextAlignment.Right});
+  field(p,'tipologias',String(q.collectionTypologies||''),154,169,26,22,{size:12,min:8,align:TextAlignment.Center,baseline:185.5961});
+  field(p,'subtotal',cash(q.subtotal),288,589,254,29,{size:18,color:rgb(0,0,0),align:TextAlignment.Right,baseline:610.9154});
+  field(p,'descuento_asesoria',cash(-q.consultationDiscount),288,617,254,27,{size:18,color:rgb(211/255,47/255,47/255),align:TextAlignment.Right,baseline:636.3998});
+  field(p,'total',cash(q.total),288,645,254,28,{size:20,color:rgb(6/255,178/255,109/255),align:TextAlignment.Right,baseline:663.8841});
   field(p,'referencia',q.number,32,754,190,20,{size:9});
   if(customTerms)field(p,'condiciones_particulares',q.terms,51,702,510,22,{size:9,min:7,multiline:true});
-  const serviceSummary='Servicios: '+q.items.map(i=>`${i.service} (${i.quantity} × ${cash(i.price)})`).join('; ');
-  field(p,'servicios_y_notas',[serviceSummary,q.schedule,q.description].filter(Boolean).join('\n'),49,545,500,36,{size:8,min:6.5,multiline:true});
+  if(compactNotes)field(p,'notas',[q.schedule,q.description].filter(Boolean).join('\n'),49,545,500,36,{size:8,min:6.5,multiline:true});
  }else{
   const p=pdf.getPage(0);
   field(p,'cliente',client.name,48,365,560,33,{size:22,color:green});
@@ -105,7 +109,20 @@ export async function quotePDF(q,client,{editable=false}={}){
    while(offset<textLines.length){if(top+28>h-45)next();const count=Math.min(textLines.length-offset,Math.floor((h-45-top)/lineHeight));const part=textLines.slice(offset,offset+count).join('\n');field(page,`anexo_${++block}`,part,37,top-12,w-76,count*lineHeight+10,{size:11,multiline:true,color:ink});top+=count*lineHeight+22;offset+=count;}
   }
  }
- form.updateFieldAppearances(font);
+ for(const [name,f] of fields){
+  const {size,color,baseline}=styles.get(name);
+  f.updateAppearances(font,(textField,widget)=>{
+   const {width,height}=widget.getRectangle(),bounds={x:1,y:1,width:width-2,height:height-2};
+   const options={alignment:textField.getAlignment(),font:trackedFont,fontSize:size,bounds};
+   const textLines=textField.isMultiline()?layoutMultilineText(textField.getText()||'',options).lines:[layoutSinglelineText(textField.getText()||'',options).line];
+   if(baseline!==undefined)textLines[0].y=baseline;
+   const appearance=drawTextField({x:0,y:0,width,height,borderWidth:0,textColor:color,font:font.name,fontSize:size,textLines,padding:1});
+   const operators=appearance.flatMap(op=>op.name==='BT'?[op,setCharacterSpacing(tracking*size)]:[op]);
+   const da=`/${font.name} ${size} Tf ${setFillingColor(color)} ${tracking*size} Tc`;
+   textField.acroField.setDefaultAppearance(da);widget.setDefaultAppearance(da);
+   return operators;
+  });
+ }
  if(!editable){
   // Remove only our flattened widget references; pdf-lib can leave them in page Annots after deleting the objects.
   const widgetRefs=form.getFields().flatMap(f=>[...f.acroField.normalizedEntries().Kids.asArray()]);
