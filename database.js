@@ -1,6 +1,7 @@
 import { DatabaseSync, backup } from 'node:sqlite';
 import { mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
+import { postgresOptions, connectionError } from './database-config.js';
 
 export async function createDatabase() {
   const remote = !!process.env.DATABASE_URL;
@@ -10,10 +11,7 @@ export async function createDatabase() {
   let driver, sqlite;
   if (remote) {
     const { Pool } = await import('pg');
-    let url;try{url=new URL(process.env.DATABASE_URL);if(!['postgres:','postgresql:'].includes(url.protocol))throw Error();}catch{throw new Error('DATABASE_URL debe ser una URI PostgreSQL válida.');}
-    // Remove URL SSL options so they cannot silently disable certificate verification.
-    for (const key of ['sslmode','sslcert','sslkey','sslrootcert','options']) url.searchParams.delete(key);
-    driver = new Pool({connectionString:url.toString(),max:3,connectionTimeoutMillis:15000,idleTimeoutMillis:30000,ssl:{rejectUnauthorized:true,...(process.env.DATABASE_CA_CERT ? {ca:process.env.DATABASE_CA_CERT} : {})}});
+    driver = new Pool(postgresOptions());
     driver.on('error',()=>console.error('Conexión de base de datos interrumpida.'));
   } else if (process.env.DB_DRIVER === 'pglite') {
     // Real PostgreSQL engine for offline integration tests; never selected in production.
@@ -45,7 +43,13 @@ export async function createDatabase() {
       for(const f of files.slice(14))unlinkSync(path.join(folder,f));
     }
   };
+  try {
   if(driver){await db.exec('CREATE SCHEMA IF NOT EXISTS boga_private; REVOKE ALL ON SCHEMA boga_private FROM PUBLIC;');}
   await db.exec('CREATE TABLE IF NOT EXISTS records (kind TEXT NOT NULL,id TEXT PRIMARY KEY,body TEXT NOT NULL);');
   return db;
+  } catch (e) {
+    await db.close().catch(()=>{});
+    if(remote)throw new Error(connectionError(e.code));
+    throw e;
+  }
 }

@@ -50,3 +50,5 @@ Pruebas Playwright con servidor y SQLite temporales: flujo cliente → conversac
 La configuración `render.yaml` prepara un servicio Render Free protegido por login y conectado a Supabase Free para persistir datos y bocetos. Requiere crear ambas cuentas gratuitas y definir la conexión de PostgreSQL; ver [instrucciones completas](DEPLOY.md). La configuración por sí sola no publica el servicio.
 
 Para comprobar el backend PostgreSQL sin una cuenta remota: `TEST_DB_DRIVER=pglite npm test`. PGlite es un motor PostgreSQL embebido solo para pruebas y desarrollo. Las cuentas reales y su TLS requieren una validación de despliegue posterior.
+
+La contraseña de PostgreSQL puede definirse por separado en `DATABASE_PASSWORD` como texto literal. Tiene prioridad sobre la contraseña en `DATABASE_URL` y evita codificar caracteres especiales dentro de la URI. Consultar la sección de errores de conexión de [DEPLOY.md](DEPLOY.md).
