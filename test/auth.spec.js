@@ -10,6 +10,7 @@ const credentials={username:'test-admin',password:'test-password-only-1234'};
 test('acceso privado: bloqueo anónimo, login, exportación y cierre de sesión',async({page,request})=>{
  expect((await request.get('/api/state')).status()).toBe(401);
  expect((await request.get('/api/backup')).status()).toBe(401);
+ expect((await request.get('/api/quotes/private-id/pdf')).status()).toBe(401);
  expect((await request.get('/api/whatsapp/status')).status()).toBe(401);
  expect((await request.post('/api/whatsapp/messages',{data:{}})).status()).toBe(401);
  await page.goto('/');await expect(page).toHaveURL(/\/login$/);

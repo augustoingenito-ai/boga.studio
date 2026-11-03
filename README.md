@@ -20,7 +20,7 @@ El servidor escucha en `127.0.0.1:3000`. `npm start` inicia sin recarga automát
 3. Adjuntar un boceto (PDF, PNG, JPEG o WebP, hasta 5 MB). Se guarda junto al presupuesto; puede descargarse desde su vista PDF.
 4. Registrar el envío manualmente cambiando el estado a Enviado. Esto no envía mensajes.
 5. Aprobar el presupuesto, registrar lo cobrado y crear el trabajo desde `+ Trabajo`. Cambiar sus etapas en el tablero.
-6. Usar PDF → Imprimir / Guardar PDF para obtener el documento. Activar los fondos gráficos en el diálogo de impresión si se desea conservar el color. La propuesta de branding incluye las seis etapas del PDF de referencia; el diseño incluye las condiciones de pago y revisiones del otro modelo. Ambas condiciones son editables.
+6. Usar PDF para ver la plantilla original completa. Descargar PDF final entrega el documento listo para enviar; Descargar PDF editable conserva campos rellenables. Branding usa las 12 páginas apaisadas originales; Diseño usa la página vertical original, con continuaciones si hay más de dos servicios. Cronograma, cliente, fechas, servicios e importes se completan desde el CRM. Las condiciones particulares y observaciones se agregan en un anexo. Ver [templates/README.md](templates/README.md).
 7. Registrar conversaciones manuales desde la ficha del cliente. Los recordatorios se muestran dentro de la app; no hay notificaciones externas.
 
 Las métricas abarcan todos los registros, sin filtro de período. Los importes se expresan en ARS. Un cliente puede tener múltiples presupuestos y trabajos. El importe cobrado es un acumulado editable, no un libro contable de transacciones.

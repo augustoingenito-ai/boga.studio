@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { quotePDF } from './quote-pdf.js';
 import { createWhatsApp, whatsappKinds } from './whatsapp.js';
 import { createAuth } from './auth.js';
 import { createDatabase } from './database.js';
@@ -24,6 +25,8 @@ async function validate(k,v){
  if(!['Borrador','Enviado','Aprobado','Rechazado','Vencido'].includes(v.status))throw error('Estado inválido.');
  if(!Array.isArray(v.items)||!v.items.length||v.items.some(i=>!i.service?.trim()||!Number.isFinite(i.quantity)||i.quantity<=0||!Number.isFinite(i.price)||i.price<0))throw error('Revisá los servicios, cantidades y precios.');
  v.total=v.items.reduce((s,i)=>s+i.quantity*i.price,0);
+ if(!Number.isFinite(v.total))throw error('El importe total no es válido.');
+ if(v.timeline!==undefined&&(!Array.isArray(v.timeline)||v.timeline.length>5||v.timeline.some(t=>typeof t!=='string'||t.length>250)))throw error('Revisá los cinco campos del cronograma.');
  if(!Number.isFinite(v.paid)||v.paid<0||v.paid>v.total)throw error('El cobro debe estar entre cero y el total.');
  if(v.attachment&&(!/^data:(image\/(png|jpeg|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/.test(v.attachment.data)||v.attachment.data.length>7000000))throw error('Adjuntá un PDF o imagen de hasta 5 MB.');
  }
@@ -56,6 +59,8 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname==='/api/whatsapp/check'&&req.method==='POST')return send(200,await whatsapp.check());
  if(url.pathname==='/api/whatsapp/messages'&&req.method==='GET')return send(200,{messages:await whatsapp.messages(),clients:await list('clients')});
  if(url.pathname==='/api/whatsapp/messages'&&req.method==='POST'){let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>20000)throw error('Mensaje demasiado largo.',413);}let input;try{input=JSON.parse(raw);}catch{throw error('Datos inválidos.');}return send(201,await whatsapp.send(input));}
+ const pdfMatch=url.pathname.match(/^\/api\/quotes\/([^/]+)\/pdf$/);
+ if(pdfMatch&&req.method==='GET'){const quote=await get('quotes',decodeURIComponent(pdfMatch[1]));if(!quote)throw error('Presupuesto inexistente.',404);const client=await get('clients',quote.clientId);if(!client)throw error('Cliente inexistente.',404);const result=await quotePDF(quote,client,{editable:url.searchParams.get('editable')==='1'});res.writeHead(200,{'Content-Type':'application/pdf','Cache-Control':'no-store','Content-Disposition':(url.searchParams.get('download')==='1'?'attachment':'inline')+'; filename="BOGA-'+(quote.type==='Diseño'?'diseno':'branding')+'-'+(result.editable?'editable':'final')+'.pdf"','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':"default-src 'none'; frame-ancestors 'self'; object-src 'self'; base-uri 'none'"});res.end(result.bytes);return;}
  const [, , k,id]=url.pathname.split('/');
  if(k==='state'&&req.method==='GET')return send(200,await allState());
  if(!kinds.includes(k))throw error('Ruta inexistente.',404);
@@ -75,9 +80,9 @@ const server=http.createServer(async(req,res)=>{
  return send(id?200:201,await save(k,v));
  }
  if(/^\/fonts\/[a-z0-9-]+\.woff2$/.test(url.pathname)){const fp=path.join(root,'public',url.pathname);if(existsSync(fp)){res.writeHead(200,{'Content-Type':'font/woff2','Cache-Control':'public, max-age=86400'});return res.end(readFileSync(fp));}}
- const files={'/':'index.html','/login.js':'login.js','/brand/boga-logo.svg':'brand/boga-logo.svg','/icons.js':'icons.js','/app.js':'app.js','/style.css':'style.css'};const f=files[url.pathname];
+ const files={'/':'index.html','/login.js':'login.js','/brand/boga-logo.svg':'brand/boga-logo.svg','/quote-defaults.js':'quote-defaults.js','/icons.js':'icons.js','/app.js':'app.js','/style.css':'style.css'};const f=files[url.pathname];
  if(!f){res.writeHead(404);return res.end('No encontrado');}
- res.writeHead(200,{'Content-Type':f.endsWith('svg')?'image/svg+xml':f.endsWith('html')?'text/html; charset=utf-8':f.endsWith('css')?'text/css':'text/javascript','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});res.end(readFileSync(path.join(root,'public',f)));
+ res.writeHead(200,{'Content-Type':f.endsWith('svg')?'image/svg+xml':f.endsWith('html')?'text/html; charset=utf-8':f.endsWith('css')?'text/css':'text/javascript','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});res.end(readFileSync(path.join(root,'public',f)));
  }catch(e){send(e.status||500,{error:e.status?e.message:'No se pudo guardar. Revisá el servidor.'});if(!e.status)console.error('Error interno de almacenamiento o servidor. Revisá la conexión y configuración.');}
 });
 server.listen(Number(process.env.PORT||3000),process.env.HOST||'127.0.0.1',()=>console.log('BOGA CRM iniciado en puerto '+(process.env.PORT||3000)));
