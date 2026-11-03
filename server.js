@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { createWhatsApp, whatsappKinds } from './whatsapp.js';
 import { createAuth } from './auth.js';
 import { createDatabase } from './database.js';
 import { readFileSync, existsSync } from 'node:fs';
@@ -8,10 +9,11 @@ import { randomUUID } from 'node:crypto';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const db=await createDatabase();
 const auth=await createAuth(db,root);
+const whatsapp=createWhatsApp(db);
 const kinds=['clients','quotes','jobs','notes'];
 const list=async k=>(await db.prepare('SELECT body FROM records WHERE kind=?').all(k)).map(r=>JSON.parse(r.body)).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
 const get=async(k,id)=>{const r=await db.prepare('SELECT body FROM records WHERE kind=? AND id=?').get(k,id);return r?JSON.parse(r.body):null;};
-const allState=async()=>Object.fromEntries(await Promise.all(kinds.map(async k=>[k,await list(k)])));
+const allState=async()=>({...Object.fromEntries(await Promise.all([...kinds,...whatsappKinds].map(async k=>[k,await list(k)]))),whatsappMessages:await whatsapp.messages()});
 const error=(message,status=400)=>Object.assign(new Error(message),{status});
 async function validate(k,v){
  if(k==='clients'&&!String(v.name||'').trim()) throw error('El nombre del cliente es obligatorio.');
@@ -44,16 +46,22 @@ const server=http.createServer(async(req,res)=>{
  res.setHeader('X-Frame-Options','DENY');
  res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
  const url=new URL(req.url,'http://localhost');
+ if(await whatsapp.webhook(req,res,url))return;
  if(await auth.handle(req,res,url.pathname))return;
  if(url.pathname.startsWith('/api/')){
  if(!auth.sameOrigin(req))throw error('Origen no permitido.',403);
  if(url.pathname==='/api/backup'&&req.method==='GET'){const content=JSON.stringify({version:1,exportedAt:new Date().toISOString(),...await allState()},null,2);res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store','Content-Disposition':'attachment; filename="boga-respaldo.json"'});res.end(content);return;}
+ if(url.pathname==='/api/whatsapp/status'&&req.method==='GET')return send(200,await whatsapp.status());
+ if(url.pathname==='/api/whatsapp/subscribe'&&req.method==='POST')return send(200,await whatsapp.subscribe());
+ if(url.pathname==='/api/whatsapp/check'&&req.method==='POST')return send(200,await whatsapp.check());
+ if(url.pathname==='/api/whatsapp/messages'&&req.method==='GET')return send(200,{messages:await whatsapp.messages(),clients:await list('clients')});
+ if(url.pathname==='/api/whatsapp/messages'&&req.method==='POST'){let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>20000)throw error('Mensaje demasiado largo.',413);}let input;try{input=JSON.parse(raw);}catch{throw error('Datos inválidos.');}return send(201,await whatsapp.send(input));}
  const [, , k,id]=url.pathname.split('/');
  if(k==='state'&&req.method==='GET')return send(200,await allState());
  if(!kinds.includes(k))throw error('Ruta inexistente.',404);
  if(req.method==='DELETE'){
  if(!await get(k,id))throw error('Registro inexistente.',404);
- if(k==='clients'&&(await Promise.all(['quotes','jobs','notes'].map(list))).some(arr=>arr.some(v=>v.clientId===id)))throw error('El cliente tiene registros vinculados.');
+ if(k==='clients'&&(await Promise.all(['quotes','jobs','notes',...whatsappKinds].map(list))).some(arr=>arr.some(v=>v.clientId===id)))throw error('El cliente tiene registros vinculados.');
  if(k==='quotes'&&(await list('jobs')).some(v=>v.quoteId===id))throw error('El presupuesto tiene un trabajo vinculado.');
  await db.prepare('DELETE FROM records WHERE kind=? AND id=?').run(k,id);return send(200,{ok:true});
  }

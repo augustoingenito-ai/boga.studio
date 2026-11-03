@@ -40,7 +40,7 @@ El desarrollo local conserva SQLite (`data/boga.sqlite`) si no se define `DATABA
 
 El despliegue automático está desactivado. Revisar los cambios y elegir **Manual Deploy → Deploy latest commit** en Render. Las actualizaciones del código no eliminan los datos de Supabase. Cambiar las credenciales de acceso en Render y reiniciar invalida las sesiones anteriores.
 
-Pruebas locales: `npm test` (SQLite) y `TEST_DB_DRIVER=pglite npm test` (motor PostgreSQL embebido). Las pruebas de PostgreSQL comprueban las consultas y el circuito de la app; no sustituyen la prueba de TLS, permisos, red y persistencia en la cuenta real de Supabase. WhatsApp continúa pendiente.
+Pruebas locales: `npm test` (SQLite) y `TEST_DB_DRIVER=pglite npm test` (motor PostgreSQL embebido). Las pruebas de PostgreSQL comprueban las consultas y el circuito de la app; no sustituyen la prueba de TLS, permisos, red y persistencia en la cuenta real de Supabase. Para configurar la integración opcional de WhatsApp, seguir [WHATSAPP.md](WHATSAPP.md). Requiere una cuenta y app de Meta; no se configura automáticamente con el despliegue del CRM.
 
 ## Si aparece `password authentication failed` (28P01)
 

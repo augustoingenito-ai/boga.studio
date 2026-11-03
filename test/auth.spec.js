@@ -10,6 +10,8 @@ const credentials={username:'test-admin',password:'test-password-only-1234'};
 test('acceso privado: bloqueo anónimo, login, exportación y cierre de sesión',async({page,request})=>{
  expect((await request.get('/api/state')).status()).toBe(401);
  expect((await request.get('/api/backup')).status()).toBe(401);
+ expect((await request.get('/api/whatsapp/status')).status()).toBe(401);
+ expect((await request.post('/api/whatsapp/messages',{data:{}})).status()).toBe(401);
  await page.goto('/');await expect(page).toHaveURL(/\/login$/);
  await page.getByLabel('Usuario',{exact:true}).fill(credentials.username);await page.getByLabel('Contraseña',{exact:true}).fill('incorrecta');await page.getByRole('button',{name:'Ingresar a mi estudio'}).click();await expect(page.getByRole('alert')).toContainText('incorrectos');
  await page.getByLabel('Contraseña',{exact:true}).fill(credentials.password);await page.getByRole('button',{name:'Ingresar a mi estudio'}).click();await expect(page.getByRole('heading',{name:'Tu estudio, en perspectiva.'})).toBeVisible();
@@ -26,11 +28,11 @@ test('protección contra login entre sitios y límite de intentos',async({reques
 });
 test('restauración de un respaldo en disco y negativa a sobrescribir datos',async()=>{
  const dir=await mkdtemp(path.join(tmpdir(),'boga-restore-'));const file=path.join(dir,'backup.json');
- await writeFile(file,JSON.stringify({version:1,clients:[{id:'client-1',name:'Cliente restaurado'}],quotes:[],jobs:[],notes:[]}));
+ await writeFile(file,JSON.stringify({version:1,clients:[{id:'client-1',name:'Cliente restaurado'}],quotes:[],jobs:[],notes:[],whatsappMessages:[{id:'message-1',clientId:'client-1',text:'Conversación respaldada'}],whatsappStatuses:[{id:'status-1',externalId:'meta-id',status:'read'}]}));
  const options={cwd:process.cwd(),env:{...process.env,DATA_DIR:dir}};
  await exec(process.execPath,['scripts/restore.js',file],options);
- const verify=await exec(process.execPath,['--input-type=module','-e',`import {DatabaseSync} from 'node:sqlite';const db=new DatabaseSync(process.env.DATA_DIR+'/boga.sqlite');console.log(JSON.parse(db.prepare('SELECT body FROM records').get().body).name);`],options);
- expect(verify.stdout.trim()).toBe('Cliente restaurado');
+ const verify=await exec(process.execPath,['--input-type=module','-e',`import {DatabaseSync} from 'node:sqlite';const db=new DatabaseSync(process.env.DATA_DIR+'/boga.sqlite');console.log(JSON.parse(db.prepare("SELECT body FROM records WHERE kind='clients'").get().body).name);console.log(String(db.prepare("SELECT count(*) AS n FROM records WHERE kind LIKE 'whatsapp%'").get().n));`],options);
+ expect(verify.stdout.trim()).toBe('Cliente restaurado\n2');
  await expect(exec(process.execPath,['scripts/restore.js',file],options)).rejects.toThrow(/base destino debe estar vacía/);
 });
 test('arranque público falla sin credenciales o dirección HTTPS',async()=>{

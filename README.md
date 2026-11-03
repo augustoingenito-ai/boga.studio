@@ -31,7 +31,7 @@ SQLite persiste en `data/boga.sqlite` (ignorado por Git), incluidos los bocetos.
 
 El desarrollo local en loopback puede ejecutarse sin login. El acceso remoto (`HOST=0.0.0.0`) exige `ADMIN_USERNAME` y `ADMIN_PASSWORD` de al menos 12 caracteres. En producción (`NODE_ENV=production`) también se exige una dirección HTTPS en `APP_URL` o `RENDER_EXTERNAL_URL`. Hay sesiones privadas de siete días, cierre de sesión y límite de intentos. En producción es obligatorio configurar `DATABASE_URL`; no se usa SQLite en un disco temporal. Los respaldos SQLite diarios son solo locales. Online se descarga el respaldo JSON desde la app. Ver [DEPLOY.md](DEPLOY.md) para publicarla con PostgreSQL persistente en Supabase y guardar copias externas. Los archivos .ai/.psd son formatos de entrega descriptos en las condiciones, no formatos generados por el CRM.
 
-WhatsApp está explícitamente pendiente: no hay envío, recepción, sincronización ni importación histórica. Se integrará mediante la API oficial de Meta en una etapa posterior. Tampoco se envían emails o recordatorios automáticos.
+WhatsApp tiene una integración opcional con la API oficial de Meta: bandeja, mensajes entrantes y respuestas de texto dentro de la ventana de 24 horas. Requiere configurar la app de Meta, suscripción y credenciales privadas en Render. Ver [WHATSAPP.md](WHATSAPP.md). No incluye importación histórica, medios descargados, plantillas ni envío automático de presupuestos PDF. La conexión real queda pendiente de configurar y verificar con la cuenta del usuario.
 
 ## Identidad
 

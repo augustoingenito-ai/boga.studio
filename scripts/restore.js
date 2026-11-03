@@ -5,9 +5,10 @@ import path from 'node:path';
 const input=process.argv[2];if(!input)throw Error('Indicá el archivo JSON de respaldo.');
 const state=JSON.parse(readFileSync(input,'utf8'));
 if(state.version!==1||!['clients','quotes','jobs','notes'].every(k=>Array.isArray(state[k])))throw Error('Respaldo inválido.');
-const records=['clients','quotes','jobs','notes'].flatMap(kind=>state[kind].map(v=>({kind,v})));
+for(const k of ['whatsappMessages','whatsappStatuses']){if(state[k]===undefined)state[k]=[];if(!Array.isArray(state[k]))throw Error('Respaldo WhatsApp inválido.');}
+const records=['clients','quotes','jobs','notes','whatsappMessages','whatsappStatuses'].flatMap(kind=>state[kind].map(v=>({kind,v})));
 const ids=new Set();for(const {v} of records){if(typeof v.id!=='string'||!v.id||ids.has(v.id))throw Error('IDs inválidos o duplicados.');ids.add(v.id);}
-const clients=new Set(state.clients.map(v=>v.id));for(const {kind,v} of records)if(kind!=='clients'&&!clients.has(v.clientId))throw Error('Cliente vinculado inexistente.');
+const clients=new Set(state.clients.map(v=>v.id));for(const {kind,v} of records)if(!['clients','whatsappStatuses'].includes(kind)&&!clients.has(v.clientId))throw Error('Cliente vinculado inexistente.');
 const db=await createDatabase();
 try{await db.transaction(async tx=>{
  if(Number((await tx.prepare('SELECT count(*) AS n FROM records').get()).n))throw Error('La base destino debe estar vacía. Conservá el directorio anterior antes de restaurar.');
