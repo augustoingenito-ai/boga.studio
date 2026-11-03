@@ -35,7 +35,7 @@ WhatsApp tiene una integración opcional con la API oficial de Meta: bandeja, me
 
 ## Identidad
 
-Colores del manual: `#EFB6CC`, `#06B26D`, `#000000`, `#FFFFFF`, `#FFFCF2`. Poppins local para interfaz y Goudy Bookletter 1911 para títulos. Esta última es una variante de Goudy, no la fuente exacta OFL Goudy StM del PDF; puede reemplazarse cuando se disponga del archivo autorizado de la fuente. El logotipo del encabezado es una composición tipográfica provisional, no un vector extraído del manual. Fuentes distribuidas con sus licencias en `public/fonts/`.
+Colores del manual: `#EFB6CC`, `#06B26D`, `#000000`, `#FFFFFF`, `#FFFCF2`. Poppins local para interfaz y Goudy Bookletter 1911 para títulos. Esta última es una variante de Goudy, no la fuente exacta OFL Goudy StM del PDF; puede reemplazarse cuando se disponga del archivo autorizado de la fuente. La navegación utiliza el logotipo primario original extraído como SVG de la página 2 del manual de marca (`public/brand/boga-logo.svg`), con sus curvas originales y fondo transparente. Las composiciones tipográficas de ingreso y presupuesto se mantienen como estaban. Fuentes distribuidas con sus licencias en `public/fonts/`.
 
 ## Validación
 

@@ -75,9 +75,9 @@ const server=http.createServer(async(req,res)=>{
  return send(id?200:201,await save(k,v));
  }
  if(/^\/fonts\/[a-z0-9-]+\.woff2$/.test(url.pathname)){const fp=path.join(root,'public',url.pathname);if(existsSync(fp)){res.writeHead(200,{'Content-Type':'font/woff2','Cache-Control':'public, max-age=86400'});return res.end(readFileSync(fp));}}
- const files={'/':'index.html','/login.js':'login.js','/app.js':'app.js','/style.css':'style.css'};const f=files[url.pathname];
+ const files={'/':'index.html','/login.js':'login.js','/brand/boga-logo.svg':'brand/boga-logo.svg','/app.js':'app.js','/style.css':'style.css'};const f=files[url.pathname];
  if(!f){res.writeHead(404);return res.end('No encontrado');}
- res.writeHead(200,{'Content-Type':f.endsWith('html')?'text/html; charset=utf-8':f.endsWith('css')?'text/css':'text/javascript','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});res.end(readFileSync(path.join(root,'public',f)));
+ res.writeHead(200,{'Content-Type':f.endsWith('svg')?'image/svg+xml':f.endsWith('html')?'text/html; charset=utf-8':f.endsWith('css')?'text/css':'text/javascript','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});res.end(readFileSync(path.join(root,'public',f)));
  }catch(e){send(e.status||500,{error:e.status?e.message:'No se pudo guardar. Revisá el servidor.'});if(!e.status)console.error('Error interno de almacenamiento o servidor. Revisá la conexión y configuración.');}
 });
 server.listen(Number(process.env.PORT||3000),process.env.HOST||'127.0.0.1',()=>console.log('BOGA CRM iniciado en puerto '+(process.env.PORT||3000)));
