@@ -20,13 +20,13 @@ export async function createAuth(db, root) {
   const salt = randomBytes(16);
   const expected = enabled ? await scrypt(password, salt, 64) : null;
   const authVersion = enabled ? (await scrypt(password,'BOGA-session-v1:'+username,32)).toString('hex') : '';
-  db.exec('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, expires INTEGER NOT NULL, version TEXT NOT NULL); CREATE TABLE IF NOT EXISTS login_limit (id INTEGER PRIMARY KEY, count INTEGER NOT NULL, until_at INTEGER NOT NULL);');
-  db.prepare('DELETE FROM sessions WHERE expires < ? OR version != ?').run(Date.now(), authVersion);
-  function authorized(req) {
+  await db.exec('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, expires BIGINT NOT NULL, version TEXT NOT NULL); CREATE TABLE IF NOT EXISTS login_limit (id BIGINT PRIMARY KEY, count BIGINT NOT NULL, until_at BIGINT NOT NULL);');
+  await db.prepare('DELETE FROM sessions WHERE expires < ? OR version != ?').run(Date.now(), authVersion);
+  async function authorized(req) {
     if (!enabled) return true;
     const token = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith(cookieName+'='))?.slice(cookieName.length+1);
     if (!token || !/^[a-f0-9]{64}$/.test(token)) return false;
-    const session = db.prepare('SELECT expires,version FROM sessions WHERE token=?').get(createHash('sha256').update(token).digest('hex'));
+    const session = await db.prepare('SELECT expires,version FROM sessions WHERE token=?').get(createHash('sha256').update(token).digest('hex'));
     return !!session && session.expires > Date.now() && session.version === authVersion;
   }
   function sameOrigin(req) {
@@ -37,10 +37,10 @@ export async function createAuth(db, root) {
   }
   async function handle(req, res, pathname) {
     if (pathname === '/healthz') {
-      db.prepare('SELECT 1').get(); res.writeHead(200, {'Content-Type':'application/json'}); res.end('{"status":"ok"}'); return true;
+      await db.prepare('SELECT 1').get(); res.writeHead(200, {'Content-Type':'application/json'}); res.end('{"status":"ok"}'); return true;
     }
     if (pathname === '/login' && req.method === 'GET') {
-      if (!enabled || authorized(req)) {res.writeHead(303,{Location:'/'});res.end();return true;}
+      if (!enabled || await authorized(req)) {res.writeHead(303,{Location:'/'});res.end();return true;}
       res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});
       res.end(readFileSync(root+'/public/login.html'));return true;
     }
@@ -50,30 +50,27 @@ export async function createAuth(db, root) {
       let raw = '';
       for await (const chunk of req) {raw += chunk; if (raw.length > 4096) {res.writeHead(413);res.end();return true;}}
       let input;try{input=JSON.parse(raw);}catch{input={};}
-      const limit = db.prepare('SELECT count,until_at FROM login_limit WHERE id=1').get();
-      if (limit?.count >= 10 && limit.until_at > Date.now()) {res.writeHead(429,{'Content-Type':'application/json','Retry-After':String(Math.ceil((limit.until_at-Date.now())/1000))});res.end(JSON.stringify({error:'Demasiados intentos. Esperá 15 minutos antes de volver a intentar.'}));return true;}
-      // Count attempts before the asynchronous password check to cover parallel requests.
-      const count = limit && limit.until_at > Date.now() ? limit.count+1 : 1;
-      const until = limit && limit.until_at > Date.now() ? limit.until_at : Date.now()+15*60*1000;
-      db.prepare('INSERT OR REPLACE INTO login_limit VALUES(1,?,?)').run(count,until);
+      // Atomic across requests, restarts and PostgreSQL connections.
+      const limit = await db.prepare(`INSERT INTO login_limit(id,count,until_at) VALUES(1,1,?) ON CONFLICT(id) DO UPDATE SET count=CASE WHEN login_limit.until_at > ? THEN login_limit.count+1 ELSE 1 END,until_at=CASE WHEN login_limit.until_at > ? THEN login_limit.until_at ELSE ? END RETURNING count,until_at`).get(Date.now()+900000,Date.now(),Date.now(),Date.now()+900000);
+      if (limit.count > 10) {res.writeHead(429,{'Content-Type':'application/json','Retry-After':String(Math.ceil((Number(limit.until_at)-Date.now())/1000))});res.end(JSON.stringify({error:'Demasiados intentos. Esperá 15 minutos antes de volver a intentar.'}));return true;}
       const candidate = await scrypt(typeof input.password==='string' ? input.password.slice(0,1000) : '', salt, 64);
       if (input.username !== username || !timingSafeEqual(candidate,expected)) {
         res.writeHead(401,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'Usuario o contraseña incorrectos.'}));return true;
       }
-      db.prepare('DELETE FROM login_limit').run();
-      db.prepare('DELETE FROM sessions WHERE expires < ?').run(Date.now());
+      await db.prepare('DELETE FROM login_limit').run();
+      await db.prepare('DELETE FROM sessions WHERE expires < ?').run(Date.now());
       const token = randomBytes(32).toString('hex');
-      db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(createHash('sha256').update(token).digest('hex'),Date.now()+7*86400000,authVersion);
+      await db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(createHash('sha256').update(token).digest('hex'),Date.now()+7*86400000,authVersion);
       res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store','Set-Cookie':cookie(token,7*86400)});res.end('{}');return true;
     }
     if (pathname === '/api/logout' && req.method === 'POST') {
       if (!sameOrigin(req)) {res.writeHead(403);res.end();return true;}
       const token = (req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);
-      if (token) db.prepare('DELETE FROM sessions WHERE token=?').run(createHash('sha256').update(token).digest('hex'));
+      if (token) await db.prepare('DELETE FROM sessions WHERE token=?').run(createHash('sha256').update(token).digest('hex'));
       res.writeHead(200,{'Content-Type':'application/json','Set-Cookie':cookie('',0)});res.end('{}');return true;
     }
     if (['/login.js','/style.css'].includes(pathname) || pathname.startsWith('/fonts/')) return false;
-    if (!authorized(req)) {
+    if (!await authorized(req)) {
       if (pathname.startsWith('/api/')) {res.writeHead(401,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'Tu sesión terminó. Volvé a iniciar sesión.'}));}
       else {res.writeHead(303,{Location:'/login','Cache-Control':'no-store'});res.end();}
       return true;

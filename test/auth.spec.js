@@ -35,6 +35,6 @@ test('restauración de un respaldo en disco y negativa a sobrescribir datos',asy
 });
 test('arranque público falla sin credenciales o dirección HTTPS',async()=>{
  const dir=await mkdtemp(path.join(tmpdir(),'boga-config-'));
- await expect(exec(process.execPath,['server.js'],{env:{...process.env,DATA_DIR:dir,NODE_ENV:'production',ADMIN_USERNAME:'',ADMIN_PASSWORD:''}})).rejects.toThrow(/ADMIN_USERNAME/);
- await expect(exec(process.execPath,['server.js'],{env:{...process.env,DATA_DIR:dir,NODE_ENV:'production',ADMIN_USERNAME:credentials.username,ADMIN_PASSWORD:credentials.password,APP_URL:'http://insecure.example'}})).rejects.toThrow(/HTTPS/);
+ await expect(exec(process.execPath,['server.js'],{env:{...process.env,DATA_DIR:dir,NODE_ENV:'production',ADMIN_USERNAME:'',ADMIN_PASSWORD:''}})).rejects.toThrow(/DATABASE_URL/);
+ await expect(exec(process.execPath,['--input-type=module','-e',"import {createAuth} from './auth.js';await createAuth({},'.');"],{env:{...process.env,DATA_DIR:dir,NODE_ENV:'production',ADMIN_USERNAME:credentials.username,ADMIN_PASSWORD:credentials.password,APP_URL:'http://insecure.example'}})).rejects.toThrow(/HTTPS/);
 });
