@@ -6,6 +6,7 @@ import {quoteTotals,collectionType} from './public/quote-totals.js';
 const original={Diseño:readFileSync(new URL('./templates/design.pdf',import.meta.url)),Branding:readFileSync(new URL('./templates/branding.pdf',import.meta.url)),[collectionType]:readFileSync(new URL('./templates/collection.pdf',import.meta.url))};
 const variants=Object.fromEntries(['design-grid','design-terms','design-grid-terms','collection-base','collection-terms'].map(name=>[name,readFileSync(new URL('./templates/'+name+'.pdf',import.meta.url))]));
 const fontBytes=readFileSync(new URL('./templates/Poppins-Regular.ttf',import.meta.url));
+const coolveticaBytes=readFileSync(new URL('./templates/Coolvetica-Regular.otf',import.meta.url));
 const ink=rgb(35/255,31/255,32/255),white=rgb(246/255,243/255,233/255),green=rgb(56/255,172/255,98/255),pink=rgb(241/255,200/255,216/255);
 const cash=n=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',minimumFractionDigits:0,maximumFractionDigits:2}).format(n||0).replace(/\u00a0/g,' ');
 const clean=v=>String(v??'').replace(/\r\n/g,'\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
@@ -26,23 +27,32 @@ export async function quotePDF(q,client,{editable=false}={}){
  const copies=1;
  for(let i=0;i<copies;i++)for(const page of await pdf.copyPages(template,template.getPageIndices()))pdf.addPage(page);
  const font=await pdf.embedFont(fontBytes,{subset:false});
+ const coolvetica=q.type==='Branding'?await pdf.embedFont(coolveticaBytes,{subset:false}):undefined;
  const form=pdf.getForm(),fields=new Map(),styles=new Map(),annex=[];
- const trackedFont=Object.create(font);
- trackedFont.widthOfTextAtSize=(text,size)=>font.widthOfTextAtSize(text,size)+Math.max(0,font.encodeText(text).asBytes().length/2-1)*tracking*size;
+ const trackedFonts=new Map();
+ function withTracking(typeface){
+  if(!trackedFonts.has(typeface)){
+   const tracked=Object.create(typeface);
+   tracked.widthOfTextAtSize=(text,size)=>typeface.widthOfTextAtSize(text,size)+Math.max(0,typeface.encodeText(text).asBytes().length/2-1)*tracking*size;
+   trackedFonts.set(typeface,tracked);
+  }
+  return trackedFonts.get(typeface);
+ }
  // Readers need the full font in AcroForm resources to edit names and prices later.
- form.acroForm.dict.set(PDFName.of('DR'),pdf.context.obj({Font:{[font.name]:font.ref}}));
- const charset=new Set(font.getCharacterSet());
- const validateText=text=>{for(const char of text)if(char!=='\n'&&!charset.has(char.codePointAt(0)))throw Object.assign(new Error('El presupuesto contiene caracteres que Poppins no puede representar (por ejemplo emojis). Revisá los datos antes de descargar.'),{status:422});};
- function field(page,name,value,x,top,width,height,{size=12,min=8,color=ink,align=TextAlignment.Left,multiline=false,maxChars=0,overflowTitle='Detalle completo',baseline}={}){
-  const fullText=clean(value);let text=fullText,overflowed=false;validateText(text);const overflow=()=>{if(singlePage)throw Object.assign(new Error('La información no entra en una hoja con tamaño legible. Acortá las descripciones o agrupá servicios y volvé a descargar.'),{status:422});if(!overflowed){annex.push([overflowTitle,fullText]);overflowed=true;}};
+ form.acroForm.dict.set(PDFName.of('DR'),pdf.context.obj({Font:Object.fromEntries([font,coolvetica].filter(Boolean).map(f=>[f.name,f.ref]))}));
+ const charsets=new Map([font,coolvetica].filter(Boolean).map(f=>[f,new Set(f.getCharacterSet())]));
+ const validateText=(text,typeface=font)=>{for(const char of text)if(char!=='\n'&&!charsets.get(typeface).has(char.codePointAt(0)))throw Object.assign(new Error(`El presupuesto contiene caracteres que ${typeface===font?'Poppins':'Coolvetica'} no puede representar (por ejemplo emojis). Revisá los datos antes de descargar.`),{status:422});};
+ function field(page,name,value,x,top,width,height,{size=12,min=8,color=ink,align=TextAlignment.Left,multiline=false,maxChars=0,overflowTitle='Detalle completo',baseline,typeface=font}={}){
+  const trackedFont=withTracking(typeface);
+  const fullText=clean(value);let text=fullText,overflowed=false;validateText(text,typeface);const overflow=()=>{if(singlePage)throw Object.assign(new Error('La información no entra en una hoja con tamaño legible. Acortá las descripciones o agrupá servicios y volvé a descargar.'),{status:422});if(!overflowed){annex.push([overflowTitle,fullText]);overflowed=true;}};
   if(maxChars&&text.length>maxChars){overflow();text=text.slice(0,maxChars-20)+'… (ver anexo)';}
   let actual=size;
   const longest=Math.max(0,...text.split('\n').map(t=>trackedFont.widthOfTextAtSize(t,actual)));
   if(!multiline&&longest>width-6){actual=Math.max(min,actual*(width-6)/longest);if(trackedFont.widthOfTextAtSize(text,actual)>width-6){overflow();while(text.length&&trackedFont.widthOfTextAtSize(text+'…',actual)>width-6)text=text.slice(0,-1);text+='…';}}
   if(multiline){const fits=()=>layoutMultilineText(text,{alignment:align,font:trackedFont,fontSize:actual,bounds:{x:1,y:1,width:width-2,height:height-2}}).lines.every(l=>l.y>=0&&l.width<=width-2);while(actual>min&&!fits())actual=Math.max(min,actual-.5);if(!fits()){overflow();while(text.length&&!fits())text=text.slice(0,-1);text=text.slice(0,-18)+'… (ver anexo)';while(text.length>18&&!fits())text=text.slice(0,-19)+'… (ver anexo)';}}
-  let f=fields.get(name);if(!f){f=form.createTextField(name);if(multiline)f.enableMultiline();f.setAlignment(align);f.setText(text);f.acroField.setDefaultAppearance(`/${font.name} ${actual} Tf 0 g`);f.setFontSize(actual);fields.set(name,f);}
-  f.addToPage(page,{x,y:page.getHeight()-top-height,width,height,font,textColor:color,backgroundColor:undefined,borderColor:undefined,borderWidth:0});
-  styles.set(name,{size:actual,color,baseline:baseline===undefined?undefined:top+height-baseline});
+  let f=fields.get(name);if(!f){f=form.createTextField(name);if(multiline)f.enableMultiline();f.setAlignment(align);f.setText(text);f.acroField.setDefaultAppearance(`/${typeface.name} ${actual} Tf 0 g`);f.setFontSize(actual);fields.set(name,f);}
+  f.addToPage(page,{x,y:page.getHeight()-top-height,width,height,font:typeface,textColor:color,backgroundColor:undefined,borderColor:undefined,borderWidth:0});
+  styles.set(name,{size:actual,color,typeface,baseline:baseline===undefined?undefined:top+height-baseline});
   return f;
  }
  if(q.type==='Diseño'){
@@ -84,13 +94,12 @@ export async function quotePDF(q,client,{editable=false}={}){
   if(compactNotes)field(p,'notas',[q.schedule,q.description].filter(Boolean).join('\n'),49,545,500,36,{size:8,min:6.5,multiline:true});
  }else{
   const p=pdf.getPage(0);
-  field(p,'cliente',client.name,48,365,560,33,{size:22,color:green});
   field(p,'fecha',q.date?'Fecha: '+date(q.date):'',48,459,240,23,{size:12,color:green});
   field(p,'validez',q.validityText?'Validez: '+q.validityText:q.validUntil?'Validez: '+date(q.validUntil):'',300,459,310,23,{size:12,color:green});
   field(p,'referencia',q.number,48,490,400,23,{size:11,color:green});
   const timeline=Array.isArray(q.timeline)?q.timeline:[];
   ['investigacion','logotipo','tipografia_color','manual','archivos'].forEach((name,i)=>field(pdf.getPage(8),name,timeline[i]||'',292,202+i*51,218,39,{size:15,color:white,align:TextAlignment.Right}));
-  field(pdf.getPage(8),'total',cash(q.total),555,515,245,48,{size:30,min:12,color:white,align:TextAlignment.Right});
+  field(pdf.getPage(8),'total',cash(q.total),555,515,245,48,{size:30,min:12,color:white,align:TextAlignment.Right,typeface:coolvetica,baseline:548.1754});
   const investment=q.items.map(i=>`${i.service} · ${i.quantity} × ${cash(i.price)}`).join('\n');
   field(pdf.getPage(9),'servicios','Servicios incluidos en este presupuesto:\n\n'+investment,536,330,262,210,{size:11,color:pink,multiline:true,maxChars:700,overflowTitle:'Detalle de servicios'});
  }
@@ -110,15 +119,15 @@ export async function quotePDF(q,client,{editable=false}={}){
   }
  }
  for(const [name,f] of fields){
-  const {size,color,baseline}=styles.get(name);
-  f.updateAppearances(font,(textField,widget)=>{
+  const {size,color,baseline,typeface}=styles.get(name),trackedFont=withTracking(typeface);
+  f.updateAppearances(typeface,(textField,widget)=>{
    const {width,height}=widget.getRectangle(),bounds={x:1,y:1,width:width-2,height:height-2};
    const options={alignment:textField.getAlignment(),font:trackedFont,fontSize:size,bounds};
    const textLines=textField.isMultiline()?layoutMultilineText(textField.getText()||'',options).lines:[layoutSinglelineText(textField.getText()||'',options).line];
    if(baseline!==undefined)textLines[0].y=baseline;
-   const appearance=drawTextField({x:0,y:0,width,height,borderWidth:0,textColor:color,font:font.name,fontSize:size,textLines,padding:1});
+   const appearance=drawTextField({x:0,y:0,width,height,borderWidth:0,textColor:color,font:typeface.name,fontSize:size,textLines,padding:1});
    const operators=appearance.flatMap(op=>op.name==='BT'?[op,setCharacterSpacing(tracking*size)]:[op]);
-   const da=`/${font.name} ${size} Tf ${setFillingColor(color)} ${tracking*size} Tc`;
+   const da=`/${typeface.name} ${size} Tf ${setFillingColor(color)} ${tracking*size} Tc`;
    textField.acroField.setDefaultAppearance(da);widget.setDefaultAppearance(da);
    return operators;
   });
