@@ -19,7 +19,8 @@ const error=(message,status=400)=>Object.assign(new Error(message),{status});
 async function validate(k,v){
  if(k==='clients'&&!String(v.name||'').trim()) throw error('El nombre del cliente es obligatorio.');
  if(k!=='clients'&&!await get('clients',v.clientId))throw error('Seleccioná un cliente existente.');
- if(['quotes','jobs'].includes(k)&&!String(v.title||'').trim())throw error('El título es obligatorio.');
+ if(k==='quotes'&&!String(v.title||'').trim())v.title=String(v.number||'').trim()||'Presupuesto de '+String(v.type||'').toLowerCase();
+ if(k==='jobs'&&!String(v.title||'').trim())throw error('El título es obligatorio.');
  if(k==='quotes'){
  if(!['Branding','Diseño'].includes(v.type))throw error('Tipo de presupuesto inválido.');
  if(!['Borrador','Enviado','Aprobado','Rechazado','Vencido'].includes(v.status))throw error('Estado inválido.');

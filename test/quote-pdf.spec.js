@@ -6,10 +6,10 @@ const base={title:'Identidad Álamo',number:'BG-TEST',date:'2026-11-03',validUnt
 test('plantillas originales: tamaños, doce páginas branding y PDF rellenable con valores reales',async()=>{
  for(const [type,pages,terms] of [['Diseño',1,designTerms],['Branding',12,brandTerms]]){
   const result=await quotePDF({...base,type,terms,timeline:['2 días','5 días','2 días','3 días','1 día']},{name:'María Núñez'},{editable:true});const pdf=await PDFDocument.load(result.bytes);expect(pdf.getPageCount()).toBe(pages);expect(pdf.getPage(0).getWidth()>pdf.getPage(0).getHeight()).toBe(type==='Branding');
-  const form=pdf.getForm();expect(form.getTextField('cliente').getText()).toBe('María Núñez');expect(form.getTextField('total').getText()).toBe('$ 200.000');
+  const form=pdf.getForm();expect(form.getFields().map(f=>f.getName())).not.toContain('proyecto');expect(pdf.getTitle()).not.toContain(base.title);expect(form.getTextField('cliente').getText()).toBe('María Núñez');expect(form.getTextField('total').getText()).toBe('$ 200.000');
   if(type==='Branding')expect(form.getTextField('investigacion').getText()).toBe('2 días');
   form.getTextField('cliente').setText('Nombre editado');const edited=await PDFDocument.load(await pdf.save({updateFieldAppearances:false}));expect(edited.getForm().getTextField('cliente').getText()).toBe('Nombre editado');
-  const final=await PDFDocument.load((await quotePDF({...base,type,terms},{name:'María Núñez'})).bytes);expect(final.getForm().getFields()).toHaveLength(0);expect(final.getPageCount()).toBe(pages);
+  const final=await PDFDocument.load((await quotePDF({...base,type,terms},{name:'María Núñez'})).bytes);expect(final.getForm().getFields()).toHaveLength(0);expect(final.getPageCount()).toBe(pages);for(const page of final.getPages())for(const ref of page.node.Annots()?.asArray()||[])expect(final.context.lookup(ref)).toBeDefined();
  }
 });
 test('diseño: cuatro servicios usan continuación sin perder filas ni repetir el total',async()=>{

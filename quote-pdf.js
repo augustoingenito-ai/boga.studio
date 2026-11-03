@@ -38,7 +38,6 @@ export async function quotePDF(q,client,{editable=false}={}){
    field(p,'cliente',client.name,113,44,330,28,{size:16});
    field(p,'fecha',date(q.date),113,70,310,27,{size:16});
    field(p,'validez',q.validityText||date(q.validUntil),113,95,310,27,{size:16});
-   field(p,'proyecto',q.title,39,146,510,48,{size:16,multiline:true,maxChars:140,overflowTitle:'Proyecto'});
    field(p,'referencia',q.number,39,746,370,19,{size:10});
    q.items.slice(n*2,n*2+2).forEach((item,row)=>{
     const top=row===0?303:344,index=n*2+row;
@@ -53,7 +52,6 @@ export async function quotePDF(q,client,{editable=false}={}){
  }else{
   const p=pdf.getPage(0);
   field(p,'cliente',client.name,48,365,560,33,{size:22,color:green});
-  field(p,'proyecto',q.title,48,403,560,48,{size:17,multiline:true,color:green,maxChars:180,overflowTitle:'Proyecto'});
   field(p,'fecha',q.date?'Fecha: '+date(q.date):'',48,459,240,23,{size:12,color:green});
   field(p,'validez',q.validityText?'Validez: '+q.validityText:q.validUntil?'Validez: '+date(q.validUntil):'',300,459,310,23,{size:12,color:green});
   field(p,'referencia',q.number,48,490,400,23,{size:11,color:green});
@@ -80,7 +78,12 @@ export async function quotePDF(q,client,{editable=false}={}){
   }
  }
  form.updateFieldAppearances(font);
- if(!editable)form.flatten({updateFieldAppearances:false});
- pdf.setTitle(`${q.type} — ${q.title}`);pdf.setAuthor('BOGA Studio');pdf.setSubject('Presupuesto '+clean(q.number));pdf.setCreator('BOGA Studio CRM');
+ if(!editable){
+  // Remove only our flattened widget references; pdf-lib can leave them in page Annots after deleting the objects.
+  const widgetRefs=form.getFields().flatMap(f=>[...f.acroField.normalizedEntries().Kids.asArray()]);
+  form.flatten({updateFieldAppearances:false});
+  for(const page of pdf.getPages())for(const ref of widgetRefs)page.node.removeAnnot(ref);
+ }
+ pdf.setTitle(`${q.type} — ${clean(q.number)||'Presupuesto'}`);pdf.setAuthor('BOGA Studio');pdf.setSubject('Presupuesto '+clean(q.number));pdf.setCreator('BOGA Studio CRM');
  return {bytes:Buffer.from(await pdf.save({updateFieldAppearances:false})),pages:pdf.getPageCount(),editable};
 }
