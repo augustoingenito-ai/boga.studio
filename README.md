@@ -18,12 +18,20 @@ El servidor escucha en `127.0.0.1:3000`. `npm start` inicia sin recarga automát
 1. Crear un cliente y agregar etiquetas, datos de contacto y próximo seguimiento.
 2. Crear un presupuesto, elegir Branding, Diseño o Diseño de colección y completar servicios, cantidades, precios y condiciones. Los precios unitarios negativos restan del subtotal; las cantidades deben ser positivas. En colección se pregunta primero si hubo asesoría y cuánto se cobró, y se ingresa manualmente la cantidad de tipologías. La asesoría se descuenta una sola vez del subtotal, sin registrarse como cobro del nuevo presupuesto. El servidor calcula y valida el total neto.
 3. Adjuntar un boceto (PDF, PNG, JPEG o WebP, hasta 5 MB). Se guarda junto al presupuesto; puede descargarse desde su vista PDF.
-4. Registrar el envío manualmente cambiando el estado a Enviado. Esto no envía mensajes.
-5. Aprobar el presupuesto, registrar lo cobrado y crear el trabajo desde `+ Trabajo`. Cambiar sus etapas en el tablero.
+4. Registrar el envío manualmente cambiando el estado a Enviado. Se guarda la fecha de envío (editable si se envió antes) y se agenda un seguimiento 7 días después. Esto no envía mensajes. Al registrar la respuesta del cliente, realizar el seguimiento o cambiar a otro estado, ese recordatorio se cierra.
+5. Aprobar el presupuesto, registrar lo cobrado y crear el trabajo desde `+ Trabajo`. Cargar la fecha de próxima revisión y la fecha de entrega; cambiar sus etapas en el tablero. También se pueden crear trabajos sin presupuesto vinculado.
 6. Usar PDF para ver la plantilla original completa. Descargar PDF final entrega el documento listo para enviar; Descargar PDF editable conserva campos rellenables. Branding mantiene sus 12 páginas apaisadas y sus anexos opcionales. Diseño y Diseño de colección se descargan en una sola hoja: la tabla de Diseño se adapta para tres o más servicios y colección muestra las tipologías, el subtotal, el descuento por asesoría y el total, sin resumen automático de servicios. Los datos completados usan Poppins con tracking −40. Si el contenido excede una hoja legible, la app pide acortarlo o agrupar servicios antes de descargar. Ver [templates/README.md](templates/README.md).
 7. Registrar conversaciones manuales desde la ficha del cliente. Los recordatorios se muestran dentro de la app; no hay notificaciones externas.
 
 Las métricas abarcan todos los registros, sin filtro de período. Los importes se expresan en ARS. Un cliente puede tener múltiples presupuestos y trabajos. El importe cobrado es un acumulado editable, no un libro contable de transacciones.
+
+## Agenda y próximos compromisos
+
+La sección Agenda (antes Seguimientos) incluye un calendario mensual con entregas, revisiones, seguimientos de presupuestos y próximos contactos de clientes. Permite navegar por meses, volver a hoy y ver el detalle de un día. Cada compromiso abre el registro correspondiente y muestra si vence hoy, cuántos días faltan o cuántos días lleva vencido. Los cálculos usan días corridos y la zona horaria de Argentina.
+
+El dashboard muestra hasta cinco próximos trabajos y cinco seguimientos de presupuesto, empezando por los más antiguos. En Brief, Diseño y Revisión se prioriza la fecha de próxima revisión; si falta, se muestra la entrega disponible. En Entrega se prioriza la fecha de entrega y deja de aparecer la revisión anterior. Los trabajos Finalizados salen de los pendientes. El calendario incluye tanto la revisión como la entrega de los trabajos activos, según su etapa. Las fechas se cargan en cada trabajo; no se inventan plazos a partir de las condiciones del PDF. Los registros con fechas pendientes de completar se señalan en la agenda.
+
+Los presupuestos usan `sentOn` como fecha de envío y `followupOn` como fecha calculada a siete días, solo mientras estén Enviados y no tengan `respondedOn` ni `followedUpOn`. Editar el presupuesto no reinicia la cuenta. Volver a Enviado desde otro estado inicia un nuevo envío y permite corregir su fecha. Los botones «Cliente respondió» y «Seguimiento realizado» guardan la fecha y cierran el recordatorio; también se pueden editar esas fechas desde el presupuesto. Este seguimiento es único por envío. En presupuestos antiguos Enviados sin fecha conocida, se pide cargar el envío real: no se usa la fecha de creación como sustituto. La respuesta del cliente se registra manualmente.
 
 ## Datos y límites de esta versión
 

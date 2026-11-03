@@ -1,0 +1,53 @@
+import {test,expect} from '@playwright/test';
+import {studioToday,addDays,validDate,daysUntil,deadlineText,quoteFollowupOn,quoteSchedule,agendaEvents,nextJobMilestone} from '../public/agenda.js';
+const quoteData=clientId=>({clientId,type:'Diseño',status:'Enviado',paid:0,number:'BG-AGENDA',items:[{service:'Diseño',quantity:1,price:100000}]});
+let existing;
+test.beforeEach(async({request})=>{const state=await (await request.get('/api/state')).json();existing=Object.fromEntries(['clients','quotes','jobs','notes'].map(k=>[k,new Set(state[k].map(v=>v.id))]));});
+test.afterEach(async({request})=>{const state=await (await request.get('/api/state')).json();for(const kind of ['jobs','quotes','notes','clients'])for(const v of state[kind])if(!existing[kind].has(v.id))expect((await request.delete('/api/'+kind+'/'+v.id)).ok()).toBe(true);});
+test('agenda: días de calendario, cambio de año, zona argentina y etapas',()=>{
+ expect(studioToday(new Date('2026-11-04T01:30:00Z'))).toBe('2026-11-03');
+ expect(addDays('2026-12-28',7)).toBe('2027-01-04');expect(addDays('2024-02-26',7)).toBe('2024-03-04');
+ expect(validDate('2026-02-30')).toBe(false);expect(validDate('2024-02-29')).toBe(true);
+ expect(daysUntil('2026-11-04','2026-11-03')).toBe(1);expect(deadlineText('2026-11-03','2026-11-03')).toBe('Hoy');expect(deadlineText('2026-11-01','2026-11-03')).toBe('Vencido hace 2 días');
+ const job={id:'j',title:'Trabajo',reviewDue:'2026-11-05',due:'2026-11-10'};
+ for(const stage of ['Brief','Diseño','Revisión'])expect(nextJobMilestone({...job,stage})?.kind).toBe('review');
+ expect(nextJobMilestone({...job,stage:'Entrega'})?.kind).toBe('delivery');expect(nextJobMilestone({...job,stage:'Finalizado'})).toBeNull();
+ expect(agendaEvents({jobs:[{...job,stage:'Diseño'}]})).toHaveLength(2);expect(agendaEvents({jobs:[{...job,stage:'Entrega'}]})).toHaveLength(1);
+ const legacy={status:'Enviado',createdAt:'2026-10-01T10:00:00Z'};expect(quoteFollowupOn(legacy)).toBe('');expect(quoteSchedule(legacy,{paid:100},'2026-11-03').sentOn).toBeUndefined();
+});
+test('presupuestos: guardar envío real, mantenerlo al editar y cerrar o reiniciar el seguimiento',async({request})=>{
+ const c=await (await request.post('/api/clients',{data:{name:'Fechas de presupuesto'}})).json();
+ const response=await request.post('/api/quotes',{data:{...quoteData(c.id),status:'Borrador'}});const q=await response.json();
+ let sent=await (await request.put('/api/quotes/'+q.id,{data:{status:'Enviado'}})).json();expect(sent.sentOn).toBe(studioToday());expect(sent.followupOn).toBe(addDays(studioToday(),7));
+ sent=await (await request.put('/api/quotes/'+q.id,{data:{sentOn:addDays(studioToday(),-10),followupOn:'2000-01-01'}})).json();expect(sent.followupOn).toBe(addDays(studioToday(),-3));
+ const edited=await (await request.put('/api/quotes/'+q.id,{data:{paid:1000}})).json();expect(edited.sentOn).toBe(sent.sentOn);expect(edited.followupOn).toBe(sent.followupOn);
+ const done=await (await request.put('/api/quotes/'+q.id,{data:{followedUpOn:studioToday()}})).json();expect(done.followupOn).toBe('');expect(done.status).toBe('Enviado');
+ const answered=await (await request.put('/api/quotes/'+q.id,{data:{respondedOn:studioToday(),followedUpOn:''}})).json();expect(answered.followupOn).toBe('');
+ const approved=await (await request.put('/api/quotes/'+q.id,{data:{status:'Aprobado'}})).json();expect(quoteFollowupOn(approved)).toBe('');
+ const resent=await (await request.put('/api/quotes/'+q.id,{data:{status:'Enviado'}})).json();expect(resent.sentOn).toBe(studioToday());expect(resent.respondedOn).toBe('');expect(resent.followedUpOn).toBe('');expect(resent.followupOn).toBe(addDays(studioToday(),7));
+ expect((await request.post('/api/quotes',{data:{...quoteData(c.id),sentOn:'2026-02-30'}})).status()).toBe(400);
+ expect((await request.post('/api/quotes',{data:{...quoteData(c.id),sentOn:addDays(studioToday(),1)}})).status()).toBe(400);
+ const auto=await (await request.post('/api/quotes',{data:quoteData(c.id)})).json();expect(auto.sentOn).toBe(studioToday());
+ const state=await (await request.get('/api/state')).json();expect(state.quotes.find(v=>v.id===resent.id).followupOn).toBe(addDays(studioToday(),7));
+});
+test('dashboard y calendario: revisión por etapa, entrega vencida, cierre de presupuestos y móvil',async({page,request})=>{
+ const today=studioToday(),c=await (await request.post('/api/clients',{data:{name:'Estudio Agenda'}})).json();
+ const j=await (await request.post('/api/jobs',{data:{clientId:c.id,title:'Colección Agenda',stage:'Diseño',reviewDue:addDays(today,3),due:addDays(today,8)}})).json();
+ const late=await (await request.post('/api/jobs',{data:{clientId:c.id,title:'Entrega Agenda vencida',stage:'Entrega',reviewDue:addDays(today,-5),due:addDays(today,-1)}})).json();
+ const q=await (await request.post('/api/quotes',{data:{...quoteData(c.id),number:'BG-AGENDA-UI',sentOn:addDays(today,-9)}})).json();
+ await page.goto('/');const dashboard=page.locator('#dashboard-deliveries');await expect(dashboard.locator(`[data-event="review-${j.id}"]`)).toContainText('Faltan 3 días');await expect(dashboard.locator(`[data-event="delivery-${j.id}"]`)).toHaveCount(0);await expect(dashboard.locator(`[data-event="delivery-${late.id}"]`)).toContainText('Vencido hace 1 día');await expect(dashboard.locator(`[data-event="review-${late.id}"]`)).toHaveCount(0);
+ const quoteRow=page.locator('#dashboard-quote-followups').locator(`[data-event="quote-${q.id}"]`);await expect(quoteRow).toContainText('Vencido hace 2 días');await page.screenshot({path:'/tmp/boga-dashboard-agenda.png',fullPage:true});
+ await quoteRow.getByRole('button',{name:'Cliente respondió',exact:true}).click();await expect(page.locator('#dashboard-quote-followups').locator(`[data-event="quote-${q.id}"]`)).toHaveCount(0);
+ await request.put('/api/quotes/'+q.id,{data:{respondedOn:''}});await page.reload();const followed=page.locator('#dashboard-quote-followups').locator(`[data-event="quote-${q.id}"]`);await followed.getByRole('button',{name:'Seguimiento realizado',exact:true}).click();await expect(page.locator('#dashboard-quote-followups').locator(`[data-event="quote-${q.id}"]`)).toHaveCount(0);
+ await dashboard.locator(`[data-event="review-${j.id}"]`).getByRole('button',{name:'Abrir',exact:true}).click();await expect(page.getByLabel('Fecha de próxima revisión')).toHaveValue(addDays(today,3));await page.getByLabel('Etapa',{exact:true}).selectOption('Entrega');await page.getByRole('button',{name:'Guardar',exact:true}).click();await expect(dashboard.locator(`[data-event="delivery-${j.id}"]`)).toContainText('Faltan 8 días');await expect(dashboard.locator(`[data-event="review-${j.id}"]`)).toHaveCount(0);
+ await page.getByRole('button',{name:'Agenda',exact:true}).click();await expect(page.getByRole('group',{name:'Calendario de la agenda'})).toBeVisible();await page.locator('.calendar-controls').getByRole('button',{name:'›',exact:true}).click();await page.locator('.calendar-controls').getByRole('button',{name:'‹',exact:true}).click();const target=addDays(today,8);if(target.slice(0,7)!==today.slice(0,7))await page.locator('.calendar-controls').getByRole('button',{name:'›',exact:true}).click();await page.getByRole('button',{name:'Ver agenda del '+target,exact:true}).click();await expect(page.locator('#agenda-events')).toContainText('Colección Agenda');await page.getByRole('button',{name:'Ver todo el mes',exact:true}).click();
+ await page.screenshot({path:'/tmp/boga-agenda-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'/tmp/boga-agenda-mobile.png',fullPage:true});
+ await request.put('/api/jobs/'+j.id,{data:{stage:'Finalizado'}});await page.reload();await expect(page.locator('#dashboard-deliveries').locator(`[data-event="delivery-${j.id}"]`)).toHaveCount(0);
+});
+test('formulario de presupuesto muestra seguimiento a 7 días y permite registrar la respuesta',async({page,request})=>{
+ const c=await (await request.post('/api/clients',{data:{name:'Enviar desde formulario'}})).json();const q=await (await request.post('/api/quotes',{data:{...quoteData(c.id),number:'BG-AGENDA-FORM',status:'Borrador'}})).json();
+ await page.goto('/');await page.getByRole('button',{name:'Presupuestos',exact:true}).click();await page.getByRole('row').filter({hasText:'BG-AGENDA-FORM'}).getByRole('button',{name:'Editar',exact:true}).click();await expect(page.getByLabel('Fecha de envío',{exact:true})).not.toBeVisible();await page.getByLabel('Estado comercial').selectOption('Enviado');await expect(page.getByLabel('Fecha de envío',{exact:true})).toHaveValue(studioToday());await expect(page.locator('#quote-followup-preview')).toContainText('Seguimiento programado');await page.getByRole('button',{name:'Guardar',exact:true}).click();await expect(page.locator('#modal')).not.toBeVisible();
+ const state=await (await request.get('/api/state')).json();expect(state.quotes.find(v=>v.id===q.id).followupOn).toBe(addDays(studioToday(),7));
+ await page.getByRole('row').filter({hasText:'BG-AGENDA-FORM'}).getByRole('button',{name:'Editar',exact:true}).click();await page.getByLabel('Respuesta del cliente (opcional)',{exact:true}).fill(studioToday());await page.getByRole('button',{name:'Guardar',exact:true}).click();await expect(page.locator('#modal')).not.toBeVisible();await expect(page.getByRole('row').filter({hasText:'BG-AGENDA-FORM'})).toContainText('Respuesta registrada');
+});

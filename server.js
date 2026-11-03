@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { quotePDF } from './quote-pdf.js';
 import {quoteTotals,collectionType} from './public/quote-totals.js';
+import {validDate,studioToday,quoteSchedule,quoteFollowupOn} from './public/agenda.js';
 import { createWhatsApp, whatsappKinds } from './whatsapp.js';
 import { createAuth } from './auth.js';
 import { createDatabase } from './database.js';
@@ -37,6 +38,10 @@ async function validate(k,v){
  if(!Number.isFinite(v.total))throw error('El importe total no es válido.');
  if(v.timeline!==undefined&&(!Array.isArray(v.timeline)||v.timeline.length>5||v.timeline.some(t=>typeof t!=='string'||t.length>250)))throw error('Revisá los cinco campos del cronograma.');
  if(!Number.isFinite(v.paid)||v.paid<0||v.paid>v.total)throw error('El cobro debe estar entre cero y el total.');
+ if(v.sentOn&&v.sentOn>studioToday())throw error('La fecha de envío no puede estar en el futuro.');
+ if(v.sentOn&&v.respondedOn&&v.respondedOn<v.sentOn)throw error('La respuesta no puede ser anterior al envío.');
+ if(v.sentOn&&v.followedUpOn&&v.followedUpOn<v.sentOn)throw error('El seguimiento no puede ser anterior al envío.');
+ v.followupOn=quoteFollowupOn(v);
  if(v.attachment&&(!/^data:(image\/(png|jpeg|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/.test(v.attachment.data)||v.attachment.data.length>7000000))throw error('Adjuntá un PDF o imagen de hasta 5 MB.');
  }
  if(k==='jobs'){
@@ -44,7 +49,7 @@ async function validate(k,v){
  if(v.quoteId){const q=await get('quotes',v.quoteId);if(!q||q.clientId!==v.clientId||q.status!=='Aprobado')throw error('El trabajo requiere un presupuesto aprobado del mismo cliente.');}
  }
  if(k==='notes'&&!String(v.text||'').trim())throw error('Escribí una nota.');
- for(const key of ['due','followup','date','validUntil'])if(v[key]&&!/^\d{4}-\d{2}-\d{2}$/.test(v[key]))throw error('Fecha inválida.');
+ for(const key of ['due','reviewDue','followup','date','validUntil','sentOn','respondedOn','followedUpOn'])if(v[key]&&!validDate(v[key]))throw error('Fecha inválida.');
  return v;
 }
 async function save(k,v){await db.prepare('INSERT INTO records(kind,id,body) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,body=excluded.body').run(k,v.id,JSON.stringify(v));return v;}
@@ -84,12 +89,13 @@ const server=http.createServer(async(req,res)=>{
  let body;try{body=JSON.parse(raw);}catch{throw error('Datos inválidos.');}
  const old=id?await get(k,id):null;if(id&&!old)throw error('Registro inexistente.',404);
  if(!body||typeof body!=='object'||Array.isArray(body))throw error('Datos inválidos.');
- const v=await validate(k,{...old,...body,id:id||randomUUID(),createdAt:old?.createdAt||new Date().toISOString()});
+ const input=k==='quotes'?quoteSchedule(old,body):{...old,...body};
+ const v=await validate(k,{...input,id:id||randomUUID(),createdAt:old?.createdAt||new Date().toISOString()});
  if(k==='quotes'&&(await list('jobs')).some(j=>j.quoteId===v.id&&(v.status!=='Aprobado'||j.clientId!==v.clientId)))throw error('El presupuesto vinculado a un trabajo debe mantener su cliente y su aprobación.');
  return send(id?200:201,await save(k,v));
  }
  if(/^\/fonts\/[a-z0-9-]+\.woff2$/.test(url.pathname)){const fp=path.join(root,'public',url.pathname);if(existsSync(fp)){res.writeHead(200,{'Content-Type':'font/woff2','Cache-Control':'public, max-age=86400'});return res.end(readFileSync(fp));}}
- const files={'/':'index.html','/login.js':'login.js','/brand/boga-logo.svg':'brand/boga-logo.svg','/quote-totals.js':'quote-totals.js','/quote-defaults.js':'quote-defaults.js','/icons.js':'icons.js','/app.js':'app.js','/style.css':'style.css'};const f=files[url.pathname];
+ const files={'/':'index.html','/login.js':'login.js','/brand/boga-logo.svg':'brand/boga-logo.svg','/agenda.js':'agenda.js','/quote-totals.js':'quote-totals.js','/quote-defaults.js':'quote-defaults.js','/icons.js':'icons.js','/app.js':'app.js','/style.css':'style.css'};const f=files[url.pathname];
  if(!f){res.writeHead(404);return res.end('No encontrado');}
  res.writeHead(200,{'Content-Type':f.endsWith('svg')?'image/svg+xml':f.endsWith('html')?'text/html; charset=utf-8':f.endsWith('css')?'text/css':'text/javascript','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});res.end(readFileSync(path.join(root,'public',f)));
  }catch(e){send(e.status||500,{error:e.status?e.message:'No se pudo guardar. Revisá el servidor.'});if(!e.status)console.error('Error interno de almacenamiento o servidor. Revisá la conexión y configuración.');}
