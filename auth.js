@@ -20,6 +20,12 @@ export async function createAuth(db, root) {
   const salt = randomBytes(16);
   const expected = enabled ? await scrypt(password, salt, 64) : null;
   const authVersion = enabled ? (await scrypt(password,'BOGA-session-v1:'+username,32)).toString('hex') : '';
+  // Names belong to the account identity, not to a device or a password version.
+  const profileId='profile-'+createHash('sha256').update('BOGA-account:'+ (username||'local')).digest('hex');
+  async function profile(){
+    const row=await db.prepare("SELECT body FROM records WHERE kind='userProfiles' AND id=?").get(profileId);
+    return {id:profileId,username:username||'Usuario local',displayName:row?JSON.parse(row.body).displayName:username||'Usuario local'};
+  }
   await db.exec('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, expires BIGINT NOT NULL, version TEXT NOT NULL); CREATE TABLE IF NOT EXISTS login_limit (id BIGINT PRIMARY KEY, count BIGINT NOT NULL, until_at BIGINT NOT NULL);');
   await db.prepare('DELETE FROM sessions WHERE expires < ? OR version != ?').run(Date.now(), authVersion);
   async function authorized(req) {
@@ -74,6 +80,19 @@ export async function createAuth(db, root) {
       if (pathname.startsWith('/api/')) {res.writeHead(401,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'Tu sesión terminó. Volvé a iniciar sesión.'}));}
       else {res.writeHead(303,{Location:'/login','Cache-Control':'no-store'});res.end();}
       return true;
+    }
+    if(pathname==='/api/me'){
+      const json=(status,value)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(value));};
+      if(!sameOrigin(req)){json(403,{error:'Origen no permitido.'});return true;}
+      if(req.method==='GET'){json(200,await profile());return true;}
+      if(req.method!=='PUT'){json(405,{error:'Método no permitido.'});return true;}
+      let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096){json(413,{error:'Nombre demasiado largo.'});return true;}}
+      let input;try{input=JSON.parse(raw);}catch{json(400,{error:'Datos inválidos.'});return true;}
+      const displayName=typeof input?.displayName==='string'?input.displayName.trim():'';
+      if(!displayName||displayName.length>80||/[\u0000-\u001f\u007f]/.test(displayName)){json(400,{error:'Ingresá un nombre de entre 1 y 80 caracteres.'});return true;}
+      const value={id:profileId,displayName};
+      await db.prepare("INSERT INTO records(kind,id,body) VALUES('userProfiles',?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(profileId,JSON.stringify(value));
+      json(200,await profile());return true;
     }
     return false;
   }

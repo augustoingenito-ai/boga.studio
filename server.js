@@ -67,7 +67,7 @@ const server=http.createServer(async(req,res)=>{
  if(await auth.handle(req,res,url.pathname))return;
  if(url.pathname.startsWith('/api/')){
  if(!auth.sameOrigin(req))throw error('Origen no permitido.',403);
- if(url.pathname==='/api/backup'&&req.method==='GET'){const content=JSON.stringify({version:1,exportedAt:new Date().toISOString(),...await allState()},null,2);res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store','Content-Disposition':'attachment; filename="boga-respaldo.json"'});res.end(content);return;}
+ if(url.pathname==='/api/backup'&&req.method==='GET'){const content=JSON.stringify({version:1,exportedAt:new Date().toISOString(),...await allState(),userProfiles:await list('userProfiles')},null,2);res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store','Content-Disposition':'attachment; filename="boga-respaldo.json"'});res.end(content);return;}
  if(url.pathname==='/api/whatsapp/status'&&req.method==='GET')return send(200,await whatsapp.status());
  if(url.pathname==='/api/whatsapp/subscribe'&&req.method==='POST')return send(200,await whatsapp.subscribe());
  if(url.pathname==='/api/whatsapp/check'&&req.method==='POST')return send(200,await whatsapp.check());
@@ -95,7 +95,7 @@ const server=http.createServer(async(req,res)=>{
  return send(id?200:201,await save(k,v));
  }
  if(/^\/fonts\/[a-z0-9-]+\.woff2$/.test(url.pathname)){const fp=path.join(root,'public',url.pathname);if(existsSync(fp)){res.writeHead(200,{'Content-Type':'font/woff2','Cache-Control':'public, max-age=86400'});return res.end(readFileSync(fp));}}
- const files={'/':'index.html','/login.js':'login.js','/brand/boga-logo.svg':'brand/boga-logo.svg','/agenda.js':'agenda.js','/quote-totals.js':'quote-totals.js','/quote-defaults.js':'quote-defaults.js','/icons.js':'icons.js','/app.js':'app.js','/style.css':'style.css'};const f=files[url.pathname];
+ const files={'/':'index.html','/login.js':'login.js','/brand/boga-logo.svg':'brand/boga-logo.svg','/brand/boga-studio-logo.svg':'brand/boga-studio-logo.svg','/brand/dashboard-watermark.svg':'brand/dashboard-watermark.svg','/agenda.js':'agenda.js','/quote-totals.js':'quote-totals.js','/quote-defaults.js':'quote-defaults.js','/icons.js':'icons.js','/app.js':'app.js','/style.css':'style.css'};const f=files[url.pathname];
  if(!f){res.writeHead(404);return res.end('No encontrado');}
  res.writeHead(200,{'Content-Type':f.endsWith('svg')?'image/svg+xml':f.endsWith('html')?'text/html; charset=utf-8':f.endsWith('css')?'text/css':'text/javascript','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"});res.end(readFileSync(path.join(root,'public',f)));
  }catch(e){send(e.status||500,{error:e.status?e.message:'No se pudo guardar. Revisá el servidor.'});if(!e.status)console.error('Error interno de almacenamiento o servidor. Revisá la conexión y configuración.');}

@@ -43,7 +43,11 @@ WhatsApp tiene una integración opcional con la API oficial de Meta: bandeja, me
 
 ## Identidad
 
-Colores del manual: `#EFB6CC`, `#06B26D`, `#000000`, `#FFFFFF`, `#FFFCF2`. Poppins local para interfaz y Goudy Bookletter 1911 para títulos. Esta última es una variante de Goudy, no la fuente exacta OFL Goudy StM del PDF; puede reemplazarse cuando se disponga del archivo autorizado de la fuente. La navegación usa la variante BOGA sin STUDIO solicitada por la usuaria (`public/brand/boga-logo.svg`), conservando las curvas BOGA del manual de marca y fondo transparente. Las composiciones tipográficas de ingreso y presupuesto se mantienen como estaban. Fuentes distribuidas con sus licencias en `public/fonts/`.
+La interfaz usa Coolvetica Regular local en WOFF2 con tracking −35 (−0,035 em), sin síntesis de negritas. Los presupuestos conservan sus tipografías y tracking anteriores, independientes de los estilos del navegador. Procedencia de Coolvetica en [templates/Coolvetica-SOURCE.md](templates/Coolvetica-SOURCE.md).
+
+El logo superior `public/brand/boga-studio-logo.svg` conserva las curvas del logo primario BOGASTUDIO de la hoja 2 del manual, sin fondo. El fondo del bloque de bienvenida `public/brand/dashboard-watermark.svg` extrae los gráficos de la hoja 5, sin sus textos ni cambios de color, transparencia o morfología. Se adapta al bloque manteniendo la proporción y recortando los bordes según su tamaño. Ambos son vectores originales; no se recrean con tipografía. Se regeneran con `python scripts/prepare-ui-brand.py '/ruta/MANUAL DE MARCA.pdf'` (PyMuPDF, lxml, fontTools y Brotli solo en desarrollo).
+
+La esquina inferior del menú muestra el nombre del usuario de la sesión. Al pulsarlo, «Editar mi perfil» permite guardar un nombre como Martina Berraz, con sus iniciales. Los nombres se almacenan en la base por identidad de cuenta y se incluyen en el respaldo y restauración. No se toman del almacenamiento del navegador ni de un nombre fijo en el HTML. La aplicación mantiene el acceso de administrador actual; esta modificación no agrega una pantalla para crear cuentas.
 
 ## Validación
 
