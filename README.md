@@ -35,7 +35,7 @@ WhatsApp tiene una integración opcional con la API oficial de Meta: bandeja, me
 
 ## Identidad
 
-Colores del manual: `#EFB6CC`, `#06B26D`, `#000000`, `#FFFFFF`, `#FFFCF2`. Poppins local para interfaz y Goudy Bookletter 1911 para títulos. Esta última es una variante de Goudy, no la fuente exacta OFL Goudy StM del PDF; puede reemplazarse cuando se disponga del archivo autorizado de la fuente. La navegación utiliza el logotipo primario original extraído como SVG de la página 2 del manual de marca (`public/brand/boga-logo.svg`), con sus curvas originales y fondo transparente. Las composiciones tipográficas de ingreso y presupuesto se mantienen como estaban. Fuentes distribuidas con sus licencias en `public/fonts/`.
+Colores del manual: `#EFB6CC`, `#06B26D`, `#000000`, `#FFFFFF`, `#FFFCF2`. Poppins local para interfaz y Goudy Bookletter 1911 para títulos. Esta última es una variante de Goudy, no la fuente exacta OFL Goudy StM del PDF; puede reemplazarse cuando se disponga del archivo autorizado de la fuente. La navegación usa la variante BOGA sin STUDIO solicitada por la usuaria (`public/brand/boga-logo.svg`), conservando las curvas BOGA del manual de marca y fondo transparente. Las composiciones tipográficas de ingreso y presupuesto se mantienen como estaban. Fuentes distribuidas con sus licencias en `public/fonts/`.
 
 ## Validación
 
@@ -52,3 +52,5 @@ La configuración `render.yaml` prepara un servicio Render Free protegido por lo
 Para comprobar el backend PostgreSQL sin una cuenta remota: `TEST_DB_DRIVER=pglite npm test`. PGlite es un motor PostgreSQL embebido solo para pruebas y desarrollo. Las cuentas reales y su TLS requieren una validación de despliegue posterior.
 
 La contraseña de PostgreSQL puede definirse por separado en `DATABASE_PASSWORD` como texto literal. Tiene prioridad sobre la contraseña en `DATABASE_URL` y evita codificar caracteres especiales dentro de la URI. Consultar la sección de errores de conexión de [DEPLOY.md](DEPLOY.md).
+
+Los seis iconos del menú son SVG locales de Font Awesome Free 7.3.1, incluido el símbolo de marca de WhatsApp. Atribución y licencia CC BY 4.0 en `public/icons.js` y `public/icons-LICENSE.txt`. No requieren fuentes ni servicios externos.
