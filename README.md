@@ -43,7 +43,7 @@ WhatsApp tiene una integración opcional con la API oficial de Meta: bandeja, me
 
 ## Identidad
 
-La interfaz usa Coolvetica Regular local en WOFF2 para titulares con tracking −20 (−0,02 em), y Poppins Regular para textos pequeños, controles y números con tracking −40 (−0,04 em), sin síntesis de negritas. Los presupuestos conservan sus tipografías y tracking anteriores, independientes de los estilos del navegador. Procedencia de Coolvetica en [templates/Coolvetica-SOURCE.md](templates/Coolvetica-SOURCE.md).
+La interfaz usa Coolvetica Regular local en WOFF2 para titulares sin interletrado adicional (tracking 0), y Poppins Regular para textos pequeños, controles y números con tracking −40 (−0,04 em), sin síntesis de negritas. Los presupuestos conservan sus tipografías y tracking anteriores, independientes de los estilos del navegador. Procedencia de Coolvetica en [templates/Coolvetica-SOURCE.md](templates/Coolvetica-SOURCE.md).
 
 El logo superior `public/brand/boga-studio-logo.svg` conserva las curvas del logo primario BOGASTUDIO de la hoja 2 del manual, sin fondo. El fondo del bloque de bienvenida `public/brand/dashboard-watermark.svg` extrae los gráficos de la hoja 5, sin sus textos ni cambios de color, transparencia o morfología. Se adapta al bloque manteniendo la proporción y recortando los bordes según su tamaño. Ambos son vectores originales; no se recrean con tipografía. Se regeneran con `python scripts/prepare-ui-brand.py '/ruta/MANUAL DE MARCA.pdf'` (PyMuPDF, lxml, fontTools y Brotli solo en desarrollo).
 
