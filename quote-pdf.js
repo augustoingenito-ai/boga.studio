@@ -86,9 +86,9 @@ export async function quotePDF(q,client,{editable=false}={}){
   field(p,'fecha',date(q.date),99,61,320,23,{size:14});
   field(p,'validez',q.validityText||date(q.validUntil),99,82,320,23,{size:14});
   field(p,'tipologias',String(q.collectionTypologies||''),154,169,26,22,{size:12,min:8,align:TextAlignment.Center,baseline:185.5961});
-  field(p,'subtotal',cash(q.subtotal),288,589,254,29,{size:18,color:rgb(0,0,0),align:TextAlignment.Right,baseline:610.9154});
+  if(q.hadConsultation===true)field(p,'subtotal',cash(q.subtotal),288,589,254,29,{size:18,color:rgb(0,0,0),align:TextAlignment.Right,baseline:610.9154});
   if(q.hadConsultation===true)field(p,'descuento_asesoria',cash(-q.consultationDiscount),288,617,254,27,{size:18,color:rgb(211/255,47/255,47/255),align:TextAlignment.Right,baseline:636.3998});
-  field(p,'total',cash(q.total),288,q.hadConsultation===true?645:617,254,q.hadConsultation===true?28:27,{size:20,color:rgb(6/255,178/255,109/255),align:TextAlignment.Right,baseline:q.hadConsultation===true?663.8841:636.3998});
+  field(p,'total',cash(q.total),288,q.hadConsultation===true?645:589,254,q.hadConsultation===true?28:29,{size:20,color:rgb(6/255,178/255,109/255),align:TextAlignment.Right,baseline:q.hadConsultation===true?663.8841:610.9154});
   field(p,'referencia',q.number,32,754,190,20,{size:9});
   if(customTerms)field(p,'condiciones_particulares',q.terms,51,702,510,22,{size:9,min:7,multiline:true});
   if(compactNotes)field(p,'notas',[q.schedule,q.description].filter(Boolean).join('\n'),49,545,500,36,{size:8,min:6.5,multiline:true});

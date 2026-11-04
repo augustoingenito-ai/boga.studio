@@ -56,12 +56,12 @@ test('colección sin asesoría: PDF final y editable omiten el descuento y compa
   const result=await quotePDF({...q,terms},{name:'Cliente'},{editable}),pdf=await PDFDocument.load(result.bytes),page=pdf.getPage(0),form=pdf.getForm();
   expect(pdf.getPageCount()).toBe(1);
   const content=page.node.Contents().asArray().map(ref=>Buffer.from(decodePDFRawStream(pdf.context.lookup(ref)).decode()).toString()).join('\n');
-  expect(content).not.toContain('DESCUENTO POR ASESOR');expect(content).toContain('(SUBTOTAL)');expect(content).toContain('(TOTAL)');
+  expect(content).not.toContain('DESCUENTO POR ASESOR');expect(content).not.toContain('(SUBTOTAL)');expect(content).toContain('(TOTAL)');
   expect(form.getFields().map(f=>f.getName())).not.toContain('descuento_asesoria');
   if(editable){
-   expect(form.getTextField('subtotal').getText()).toBe('$ 360.000');expect(form.getTextField('total').getText()).toBe('$ 360.000');
+   expect(form.getFields().map(f=>f.getName())).not.toContain('subtotal');expect(form.getTextField('total').getText()).toBe('$ 360.000');
    const total=form.getTextField('total'),widget=total.acroField.getWidgets()[0],ap=Buffer.from(decodePDFRawStream(widget.getAppearances().normal).decode()).toString(),matrix=ap.match(/1 0 0 1 ([\d.]+) ([\d.]+) Tm/);
-   expect(page.getHeight()-widget.getRectangle().y-Number(matrix[2])).toBeCloseTo(636.3998,4);expect(widget.getRectangle().x+widget.getRectangle().width).toBe(542);
+   expect(page.getHeight()-widget.getRectangle().y-Number(matrix[2])).toBeCloseTo(610.9154,4);expect(widget.getRectangle().x+widget.getRectangle().width).toBe(542);
    if(terms!==collectionTerms)expect(form.getTextField('condiciones_particulares').getText()).toBe(terms);
   }else expect(form.getFields()).toHaveLength(0);
  }
