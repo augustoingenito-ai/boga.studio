@@ -17,7 +17,7 @@ for grid,terms,name in [(True,False,'design-grid'),(False,True,'design-terms'),(
         assert count==1,(obj,count)
     xref=doc.get_new_xref();doc.update_object(xref,'<<>>');doc.update_stream(xref,content)
     page.set_contents(xref);doc.save(ROOT/(name+'.pdf'),garbage=4,deflate=True)
-for custom_terms,name in [(False,'collection-base'),(True,'collection-terms')]:
+for custom_terms,no_consultation,name in [(False,False,'collection-base'),(True,False,'collection-terms'),(False,True,'collection-no-consultation-base'),(True,True,'collection-no-consultation-terms')]:
     doc=fitz.open(ROOT/'collection.pdf');page=doc[0]
     # Replace the underscore glyphs with their exact text advance. The number
     # keeps its original position without painting over the translucent artwork.
@@ -31,5 +31,20 @@ for custom_terms,name in [(False,'collection-base'),(True,'collection-terms')]:
     content=content.replace(b'(e _________  ti)',f'(e ) {adjustment:.6f} (  ti)'.encode())
     if custom_terms:
         content,count=re.subn(rb'/Fm3\s+Do\b',b'',content);assert count==1
+    if no_consultation:
+        # Illustrator paints the advisory label twice (fill and stroke). Remove
+        # both text objects while preserving surrounding clipping/graphics state.
+        blocks=list(re.finditer(rb'BT\b[\s\S]*?\bET\b',content))
+        advisory=[block for block in blocks if b'(DESCUENTO POR ASESOR\\315A)' in block.group()]
+        assert len(advisory)==2
+        for block in reversed(advisory):content=content[:block.start()]+content[block.end():]
+        # Place TOTAL on the second line and shorten the original border by the
+        # same amount. Keep the subtotal and all artwork outside the box intact.
+        assert content.count(b'52.2881 178.0059 Tm')==2
+        content=content.replace(b'52.2881 178.0059 Tm',b'52.2881 205.4902 Tm')
+        border=next(row[0] for row in page.get_xobjects() if row[1]=='Fm1')
+        border_content=doc.xref_stream(border)
+        assert border_content.count(b'558.531 165.217 -521.787 94.063 re')==1
+        doc.update_stream(border,border_content.replace(b'558.531 165.217 -521.787 94.063 re',b'558.531 192.7013 -521.787 66.5787 re'))
     xref=doc.get_new_xref();doc.update_object(xref,'<<>>');doc.update_stream(xref,content)
     page.set_contents(xref);doc.save(ROOT/(name+'.pdf'),garbage=4,deflate=True)

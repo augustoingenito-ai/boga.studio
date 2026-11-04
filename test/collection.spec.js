@@ -50,3 +50,19 @@ test('colección: datos con tracking -40, importes alineados y colores solo en l
  const noted=await PDFDocument.load((await quotePDF({...q,description:'Nota del cliente'},{name:'Cliente'},{editable:true})).bytes);
  expect(noted.getForm().getTextField('notas').getText()).toBe('Nota del cliente');
 });
+test('colección sin asesoría: PDF final y editable omiten el descuento y compactan el total',async()=>{
+ const q={type:collectionType,items:[{service:'Diseño de Colección',quantity:8,price:45000}],hadConsultation:false,consultationAmount:40000,collectionTypologies:8};
+ for(const terms of [collectionTerms,'Condición particular: 50% al iniciar y 50% al entregar.'])for(const editable of [false,true]){
+  const result=await quotePDF({...q,terms},{name:'Cliente'},{editable}),pdf=await PDFDocument.load(result.bytes),page=pdf.getPage(0),form=pdf.getForm();
+  expect(pdf.getPageCount()).toBe(1);
+  const content=page.node.Contents().asArray().map(ref=>Buffer.from(decodePDFRawStream(pdf.context.lookup(ref)).decode()).toString()).join('\n');
+  expect(content).not.toContain('DESCUENTO POR ASESOR');expect(content).toContain('(SUBTOTAL)');expect(content).toContain('(TOTAL)');
+  expect(form.getFields().map(f=>f.getName())).not.toContain('descuento_asesoria');
+  if(editable){
+   expect(form.getTextField('subtotal').getText()).toBe('$ 360.000');expect(form.getTextField('total').getText()).toBe('$ 360.000');
+   const total=form.getTextField('total'),widget=total.acroField.getWidgets()[0],ap=Buffer.from(decodePDFRawStream(widget.getAppearances().normal).decode()).toString(),matrix=ap.match(/1 0 0 1 ([\d.]+) ([\d.]+) Tm/);
+   expect(page.getHeight()-widget.getRectangle().y-Number(matrix[2])).toBeCloseTo(636.3998,4);expect(widget.getRectangle().x+widget.getRectangle().width).toBe(542);
+   if(terms!==collectionTerms)expect(form.getTextField('condiciones_particulares').getText()).toBe(terms);
+  }else expect(form.getFields()).toHaveLength(0);
+ }
+});

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { designTerms, brandTerms, collectionTerms } from './public/quote-defaults.js';
 import {quoteTotals,collectionType} from './public/quote-totals.js';
 const original={Diseño:readFileSync(new URL('./templates/design.pdf',import.meta.url)),Branding:readFileSync(new URL('./templates/branding.pdf',import.meta.url)),[collectionType]:readFileSync(new URL('./templates/collection.pdf',import.meta.url))};
-const variants=Object.fromEntries(['design-grid','design-terms','design-grid-terms','collection-base','collection-terms'].map(name=>[name,readFileSync(new URL('./templates/'+name+'.pdf',import.meta.url))]));
+const variants=Object.fromEntries(['design-grid','design-terms','design-grid-terms','collection-base','collection-terms','collection-no-consultation-base','collection-no-consultation-terms'].map(name=>[name,readFileSync(new URL('./templates/'+name+'.pdf',import.meta.url))]));
 const fontBytes=readFileSync(new URL('./templates/Poppins-Regular.ttf',import.meta.url));
 const coolveticaBytes=readFileSync(new URL('./templates/Coolvetica-Regular.otf',import.meta.url));
 const ink=rgb(35/255,31/255,32/255),white=rgb(246/255,243/255,233/255),green=rgb(56/255,172/255,98/255),pink=rgb(241/255,200/255,216/255);
@@ -21,7 +21,7 @@ export async function quotePDF(q,client,{editable=false}={}){
  const customTerms=!!(q.terms&&q.terms!==expectedTerms),compactNotes=!!(q.schedule||q.description);
  let source=original[q.type];
  if(q.type==='Diseño'){const grid=q.items.length>2,terms=customTerms||compactNotes;if(grid||terms)source=variants['design'+(grid?'-grid':'')+(terms?'-terms':'')];}
- if(q.type===collectionType)source=variants[customTerms?'collection-terms':'collection-base'];
+ if(q.type===collectionType)source=variants['collection'+(q.hadConsultation===true?'':'-no-consultation')+(customTerms?'-terms':'-base')];
  const pdf=await PDFDocument.create();pdf.registerFontkit(fontkit);
  const template=await PDFDocument.load(source);
  const copies=1;
@@ -87,8 +87,8 @@ export async function quotePDF(q,client,{editable=false}={}){
   field(p,'validez',q.validityText||date(q.validUntil),99,82,320,23,{size:14});
   field(p,'tipologias',String(q.collectionTypologies||''),154,169,26,22,{size:12,min:8,align:TextAlignment.Center,baseline:185.5961});
   field(p,'subtotal',cash(q.subtotal),288,589,254,29,{size:18,color:rgb(0,0,0),align:TextAlignment.Right,baseline:610.9154});
-  field(p,'descuento_asesoria',cash(-q.consultationDiscount),288,617,254,27,{size:18,color:rgb(211/255,47/255,47/255),align:TextAlignment.Right,baseline:636.3998});
-  field(p,'total',cash(q.total),288,645,254,28,{size:20,color:rgb(6/255,178/255,109/255),align:TextAlignment.Right,baseline:663.8841});
+  if(q.hadConsultation===true)field(p,'descuento_asesoria',cash(-q.consultationDiscount),288,617,254,27,{size:18,color:rgb(211/255,47/255,47/255),align:TextAlignment.Right,baseline:636.3998});
+  field(p,'total',cash(q.total),288,q.hadConsultation===true?645:617,254,q.hadConsultation===true?28:27,{size:20,color:rgb(6/255,178/255,109/255),align:TextAlignment.Right,baseline:q.hadConsultation===true?663.8841:636.3998});
   field(p,'referencia',q.number,32,754,190,20,{size:9});
   if(customTerms)field(p,'condiciones_particulares',q.terms,51,702,510,22,{size:9,min:7,multiline:true});
   if(compactNotes)field(p,'notas',[q.schedule,q.description].filter(Boolean).join('\n'),49,545,500,36,{size:8,min:6.5,multiline:true});
