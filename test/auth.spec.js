@@ -15,7 +15,7 @@ test('acceso privado: bloqueo anónimo, login, exportación y cierre de sesión'
  expect((await request.get('/api/quotes/private-id/pdf')).status()).toBe(401);
  expect((await request.get('/api/whatsapp/status')).status()).toBe(401);
  expect((await request.post('/api/whatsapp/messages',{data:{}})).status()).toBe(401);
- await page.goto('/');await expect(page).toHaveURL(/\/login$/);
+ await page.goto('/');await expect(page).toHaveURL(/\/login$/);const logo=page.getByRole('img',{name:'BOGA STUDIO',exact:true});await expect(logo).toBeVisible();expect(await logo.evaluate(img=>img.complete&&img.naturalWidth>0)).toBe(true);expect(await logo.evaluate(img=>{const image=img.getBoundingClientRect(),parent=img.parentElement.getBoundingClientRect();return Math.abs(image.x+image.width/2-parent.x-parent.width/2);})).toBeLessThan(1);await expect(page.getByText('STUDIO / CRM',{exact:true})).toHaveCount(0);await expect(page.getByText('TU ESPACIO PRIVADO',{exact:true})).toHaveCount(0);
  await page.getByLabel('Usuario',{exact:true}).fill(credentials.username);await page.getByLabel('Contraseña',{exact:true}).fill('incorrecta');await page.getByRole('button',{name:'Ingresar a mi estudio'}).click();await expect(page.getByRole('alert')).toContainText('incorrectos');
  await page.getByLabel('Contraseña',{exact:true}).fill(credentials.password);await page.getByRole('button',{name:'Ingresar a mi estudio'}).click();await expect(page.getByRole('heading',{name:'Tu estudio, en perspectiva.'})).toBeVisible();
  await page.reload();await expect(page.getByRole('heading',{name:'Tu estudio, en perspectiva.'})).toBeVisible();

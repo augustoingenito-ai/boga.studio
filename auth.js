@@ -75,7 +75,7 @@ export async function createAuth(db, root) {
       if (token) await db.prepare('DELETE FROM sessions WHERE token=?').run(createHash('sha256').update(token).digest('hex'));
       res.writeHead(200,{'Content-Type':'application/json','Set-Cookie':cookie('',0)});res.end('{}');return true;
     }
-    if (['/login.js','/style.css'].includes(pathname) || pathname.startsWith('/fonts/')) return false;
+    if (['/login.js','/style.css','/brand/boga-studio-logo.svg'].includes(pathname) || pathname.startsWith('/fonts/')) return false;
     if (!await authorized(req)) {
       if (pathname.startsWith('/api/')) {res.writeHead(401,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'Tu sesión terminó. Volvé a iniciar sesión.'}));}
       else {res.writeHead(303,{Location:'/login','Cache-Control':'no-store'});res.end();}

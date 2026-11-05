@@ -26,3 +26,5 @@ body *{letter-spacing:var(--ui-tracking)}
 h1,h2,h3,.login-logo{font-family:'Coolvetica',Arial,sans-serif;letter-spacing:var(--heading-tracking);font-weight:400}.column>h3>span{font-family:'Poppins',Arial,sans-serif;letter-spacing:var(--ui-tracking)}
 
 .login-logo span{font-family:'Poppins',Arial,sans-serif;letter-spacing:var(--ui-tracking)}
+
+.login-logo img{display:block;width:270px;max-width:100%;height:auto;margin-inline:auto}
