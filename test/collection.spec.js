@@ -61,7 +61,7 @@ test('colección sin asesoría: PDF final y editable omiten el descuento y compa
   if(editable){
    expect(form.getFields().map(f=>f.getName())).not.toContain('subtotal');expect(form.getTextField('total').getText()).toBe('$ 360.000');
    const total=form.getTextField('total'),widget=total.acroField.getWidgets()[0],ap=Buffer.from(decodePDFRawStream(widget.getAppearances().normal).decode()).toString(),matrix=ap.match(/1 0 0 1 ([\d.]+) ([\d.]+) Tm/);
-   expect(page.getHeight()-widget.getRectangle().y-Number(matrix[2])).toBeCloseTo(610.9154,4);expect(widget.getRectangle().x+widget.getRectangle().width).toBe(542);
+   expect(total.acroField.getDefaultAppearance()).toContain('0 0 0 rg');expect(ap).toContain('0 0 0 rg');expect(page.getHeight()-widget.getRectangle().y-Number(matrix[2])).toBeCloseTo(610.9154,4);expect(widget.getRectangle().x+widget.getRectangle().width).toBe(542);
    if(terms!==collectionTerms)expect(form.getTextField('condiciones_particulares').getText()).toBe(terms);
   }else expect(form.getFields()).toHaveLength(0);
  }
