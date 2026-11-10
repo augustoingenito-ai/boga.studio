@@ -40,3 +40,16 @@ for no_consultation,name in [(False,'collection-base'),(True,'collection-no-cons
         content=content.replace(b'258.5117 61.8398 Tm',b'258.5117 129.7348 Tm')
     xref=doc.get_new_xref();doc.update_object(xref,'<<>>');doc.update_stream(xref,content);page.set_contents(xref)
     doc.save(ROOT/(name+'.pdf'),garbage=4,deflate=True)
+
+# Monthly accompaniment: preserve labels and all artwork, clear only sample data.
+doc=fitz.open(ROOT/'monthly.pdf');page=doc[0];content=page.read_contents()
+for sample,replacement in [
+    (b'[(Cli)5 (en)10 (te)10 (:   La)13.9 (ura Lucero - L)29 (y)19 (c F)15.1 (i)4.9 (t)]TJ',b'[(Cli)5 (en)10 (te)10 (:)]TJ'),
+    (b'[(F)15 (ec)5 (ha:      1)10 (0)49 (/)40.1 (11)28.9 (/)50.1 (20)10 (26 )]TJ',b'[(F)15 (ec)5 (ha:)]TJ'),
+]:
+    assert content.count(sample)==1,sample
+    content=content.replace(sample,replacement)
+assert content.count(b'(590.000 ARS)Tj')==2
+content=content.replace(b'(590.000 ARS)Tj',b'[]TJ')
+xref=doc.get_new_xref();doc.update_object(xref,'<<>>');doc.update_stream(xref,content);page.set_contents(xref)
+doc.save(ROOT/'monthly-base.pdf',garbage=4,deflate=True)

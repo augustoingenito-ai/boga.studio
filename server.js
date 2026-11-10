@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { quotePDF } from './quote-pdf.js';
-import {quoteTotals,collectionType} from './public/quote-totals.js';
+import {quoteTotals,collectionType,monthlyType} from './public/quote-totals.js';
 import {validDate,studioToday,quoteSchedule,quoteFollowupOn} from './public/agenda.js';
 import { createWhatsApp, whatsappKinds } from './whatsapp.js';
 import { createAuth } from './auth.js';
@@ -24,7 +24,7 @@ async function validate(k,v){
  if(k==='quotes'&&!String(v.title||'').trim())v.title=String(v.number||'').trim()||'Presupuesto de '+String(v.type||'').toLowerCase();
  if(k==='jobs'&&!String(v.title||'').trim())throw error('El título es obligatorio.');
  if(k==='quotes'){
- if(!['Branding','Diseño',collectionType].includes(v.type))throw error('Tipo de presupuesto inválido.');
+ if(!['Branding','Diseño',collectionType,monthlyType].includes(v.type))throw error('Tipo de presupuesto inválido.');
  if(!['Borrador','Enviado','Aprobado','Rechazado','Vencido'].includes(v.status))throw error('Estado inválido.');
  if(!Array.isArray(v.items)||!v.items.length||v.items.some(i=>!i.service?.trim()||!Number.isFinite(i.quantity)||i.quantity<=0||!Number.isFinite(i.price)||Math.abs(i.price)>1e12))throw error('Revisá los servicios, cantidades y precios.');
  if(v.type===collectionType){
@@ -74,7 +74,7 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname==='/api/whatsapp/messages'&&req.method==='GET')return send(200,{messages:await whatsapp.messages(),clients:await list('clients')});
  if(url.pathname==='/api/whatsapp/messages'&&req.method==='POST'){let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>20000)throw error('Mensaje demasiado largo.',413);}let input;try{input=JSON.parse(raw);}catch{throw error('Datos inválidos.');}return send(201,await whatsapp.send(input));}
  const pdfMatch=url.pathname.match(/^\/api\/quotes\/([^/]+)\/pdf$/);
- if(pdfMatch&&req.method==='GET'){const quote=await get('quotes',decodeURIComponent(pdfMatch[1]));if(!quote)throw error('Presupuesto inexistente.',404);const client=await get('clients',quote.clientId);if(!client)throw error('Cliente inexistente.',404);const result=await quotePDF(quote,client,{editable:url.searchParams.get('editable')==='1'});res.writeHead(200,{'Content-Type':'application/pdf','Cache-Control':'no-store','Content-Disposition':(url.searchParams.get('download')==='1'?'attachment':'inline')+'; filename="BOGA-'+(quote.type==='Diseño'?'diseno':quote.type===collectionType?'coleccion':'branding')+'-'+(result.editable?'editable':'final')+'.pdf"','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':"default-src 'none'; frame-ancestors 'self'; object-src 'self'; base-uri 'none'"});res.end(result.bytes);return;}
+ if(pdfMatch&&req.method==='GET'){const quote=await get('quotes',decodeURIComponent(pdfMatch[1]));if(!quote)throw error('Presupuesto inexistente.',404);const client=await get('clients',quote.clientId);if(!client)throw error('Cliente inexistente.',404);const result=await quotePDF(quote,client,{editable:url.searchParams.get('editable')==='1'});res.writeHead(200,{'Content-Type':'application/pdf','Cache-Control':'no-store','Content-Disposition':(url.searchParams.get('download')==='1'?'attachment':'inline')+'; filename="BOGA-'+(quote.type==='Diseño'?'diseno':quote.type===collectionType?'coleccion':quote.type===monthlyType?'acompanamiento-mensual':'branding')+'-'+(result.editable?'editable':'final')+'.pdf"','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':"default-src 'none'; frame-ancestors 'self'; object-src 'self'; base-uri 'none'"});res.end(result.bytes);return;}
  const [, , k,id]=url.pathname.split('/');
  if(k==='state'&&req.method==='GET')return send(200,await allState());
  if(!kinds.includes(k))throw error('Ruta inexistente.',404);

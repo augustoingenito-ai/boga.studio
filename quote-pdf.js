@@ -1,11 +1,12 @@
 import { PDFDocument, PDFName, PDFArray, decodePDFRawStream, TextAlignment, layoutMultilineText, layoutSinglelineText, drawTextField, setCharacterSpacing, setFillingColor, setStrokingColor, setLineWidth, setTextRenderingMode, TextRenderingMode, rgb, cmyk } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'node:fs';
-import { designTerms, brandTerms, collectionTerms } from './public/quote-defaults.js';
-import {quoteTotals,collectionType} from './public/quote-totals.js';
-const original={Diseño:readFileSync(new URL('./templates/design.pdf',import.meta.url)),Branding:readFileSync(new URL('./templates/branding.pdf',import.meta.url)),[collectionType]:readFileSync(new URL('./templates/collection.pdf',import.meta.url))};
-const variants=Object.fromEntries(['design-grid','design-terms','design-grid-terms','collection-base','collection-no-consultation-base'].map(name=>[name,readFileSync(new URL('./templates/'+name+'.pdf',import.meta.url))]));
+import { designTerms, brandTerms, collectionTerms, monthlyTerms } from './public/quote-defaults.js';
+import {quoteTotals,collectionType,monthlyType} from './public/quote-totals.js';
+const original={Diseño:readFileSync(new URL('./templates/design.pdf',import.meta.url)),Branding:readFileSync(new URL('./templates/branding.pdf',import.meta.url)),[collectionType]:readFileSync(new URL('./templates/collection.pdf',import.meta.url)),[monthlyType]:readFileSync(new URL('./templates/monthly.pdf',import.meta.url))};
+const variants=Object.fromEntries(['design-grid','design-terms','design-grid-terms','collection-base','collection-no-consultation-base','monthly-base'].map(name=>[name,readFileSync(new URL('./templates/'+name+'.pdf',import.meta.url))]));
 const fontBytes=readFileSync(new URL('./templates/Poppins-Regular.ttf',import.meta.url));
+const goudyBytes=readFileSync(new URL('./templates/SortsMillGoudy-Regular.ttf',import.meta.url));
 const coolveticaBytes=readFileSync(new URL('./templates/Coolvetica-Regular.otf',import.meta.url));
 const ink=rgb(35/255,31/255,32/255),white=rgb(246/255,243/255,233/255),green=rgb(56/255,172/255,98/255),pink=rgb(241/255,200/255,216/255);
 const cash=n=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',minimumFractionDigits:0,maximumFractionDigits:2}).format(n||0).replace(/\u00a0/g,' ');
@@ -17,11 +18,12 @@ const tracking=-40/1000;
 export async function quotePDF(q,client,{editable=false}={}){
  if(!original[q.type])throw Object.assign(new Error('Seleccioná una plantilla de presupuesto válida.'),{status:400});
  q={...q,...quoteTotals(q)};
- const singlePage=q.type==='Diseño',collection=q.type===collectionType;
- const expectedTerms=q.type==='Branding'?brandTerms:q.type===collectionType?collectionTerms:designTerms;
+ const monthly=q.type===monthlyType,singlePage=q.type==='Diseño'||monthly,collection=q.type===collectionType;
+ const expectedTerms=q.type==='Branding'?brandTerms:q.type===collectionType?collectionTerms:monthly?monthlyTerms:designTerms;
  const customTerms=!!(q.terms&&q.terms!==expectedTerms),compactNotes=!!(q.schedule||q.description);
  let source=original[q.type];
  if(q.type==='Diseño'){const grid=q.items.length>2,terms=customTerms||compactNotes;if(grid||terms)source=variants['design'+(grid?'-grid':'')+(terms?'-terms':'')];}
+ if(monthly)source=variants['monthly-base'];
  if(collection)source=variants[q.hadConsultation===true?'collection-base':'collection-no-consultation-base'];
  const pdf=await PDFDocument.create();pdf.registerFontkit(fontkit);
  const template=await PDFDocument.load(source);
@@ -29,6 +31,7 @@ export async function quotePDF(q,client,{editable=false}={}){
  for(let i=0;i<copies;i++)for(const page of await pdf.copyPages(template,template.getPageIndices()))pdf.addPage(page);
  const font=await pdf.embedFont(fontBytes,{subset:false});
  const coolvetica=q.type==='Branding'||collection?await pdf.embedFont(coolveticaBytes,{subset:false}):undefined;
+ const goudy=monthly?await pdf.embedFont(goudyBytes,{subset:false}):undefined;
  const form=pdf.getForm(),fields=new Map(),styles=new Map(),annex=[];
  const trackedFonts=new Map();
  function withTracking(typeface){
@@ -40,12 +43,12 @@ export async function quotePDF(q,client,{editable=false}={}){
   return trackedFonts.get(typeface);
  }
  // Readers need the full font in AcroForm resources to edit names and prices later.
- form.acroForm.dict.set(PDFName.of('DR'),pdf.context.obj({Font:Object.fromEntries([font,coolvetica].filter(Boolean).map(f=>[f.name,f.ref]))}));
- const charsets=new Map([font,coolvetica].filter(Boolean).map(f=>[f,new Set(f.getCharacterSet())]));
- const validateText=(text,typeface=font)=>{for(const char of text)if(char!=='\n'&&!charsets.get(typeface).has(char.codePointAt(0)))throw Object.assign(new Error(`El presupuesto contiene caracteres que ${typeface===font?'Poppins':'Coolvetica'} no puede representar (por ejemplo emojis). Revisá los datos antes de descargar.`),{status:422});};
+ form.acroForm.dict.set(PDFName.of('DR'),pdf.context.obj({Font:Object.fromEntries([font,coolvetica,goudy].filter(Boolean).map(f=>[f.name,f.ref]))}));
+ const charsets=new Map([font,coolvetica,goudy].filter(Boolean).map(f=>[f,new Set(f.getCharacterSet())]));
+ const validateText=(text,typeface=font)=>{for(const char of text)if(char!=='\n'&&!charsets.get(typeface).has(char.codePointAt(0)))throw Object.assign(new Error(`El presupuesto contiene caracteres que ${typeface===font?'Poppins':typeface===goudy?'Sorts Mill Goudy':'Coolvetica'} no puede representar (por ejemplo emojis). Revisá los datos antes de descargar.`),{status:422});};
  function field(page,name,value,x,top,width,height,{size=12,min=8,color=ink,align=TextAlignment.Left,multiline=false,maxChars=0,overflowTitle='Detalle completo',baseline,typeface=font,strokeColor,strokeWidth=0}={}){
   const trackedFont=withTracking(typeface);
-  const fullText=clean(value);let text=fullText,overflowed=false;validateText(text,typeface);const overflow=()=>{if(singlePage||collection)throw Object.assign(new Error(collection?'La información no entra en el espacio de la plantilla con tamaño legible. Acortá esos datos y volvé a descargar.':'La información no entra en una hoja con tamaño legible. Acortá las descripciones o agrupá servicios y volvé a descargar.'),{status:422});if(!overflowed){annex.push([overflowTitle,fullText]);overflowed=true;}};
+  const fullText=clean(value);let text=fullText,overflowed=false;validateText(text,typeface);const overflow=()=>{if(singlePage||collection)throw Object.assign(new Error(collection||monthly?'La información no entra en el espacio de la plantilla con tamaño legible. Acortá esos datos y volvé a descargar.':'La información no entra en una hoja con tamaño legible. Acortá las descripciones o agrupá servicios y volvé a descargar.'),{status:422});if(!overflowed){annex.push([overflowTitle,fullText]);overflowed=true;}};
   if(maxChars&&text.length>maxChars){overflow();text=text.slice(0,maxChars-20)+'… (ver anexo)';}
   let actual=size;
   const longest=Math.max(0,...text.split('\n').map(t=>trackedFont.widthOfTextAtSize(t,actual)));
@@ -81,6 +84,12 @@ export async function quotePDF(q,client,{editable=false}={}){
   });
   field(p,'total',cash(q.total),43,447,506,33,{size:22,align:TextAlignment.Right});
   if(customTerms||compactNotes){const parts=[q.terms||designTerms];if(q.schedule)parts.push('Cronograma y adicionales: '+q.schedule);if(q.description)parts.push('Observaciones: '+q.description);field(p,'condiciones_y_notas',parts.join('\n\n'),39,530,518,178,{size:9,min:7,multiline:true});}
+ }else if(monthly){
+  const p=pdf.getPage(0),clientName=[client.name,client.company&&client.company!==client.name?client.company:''].filter(Boolean).join(' - ');
+  const headerStyle={size:18.5438,min:11,color:rgb(.114,.114,.106),typeface:goudy};
+  field(p,'cliente',clientName,98.1996,47,375,34,{...headerStyle,baseline:70.2914});
+  field(p,'fecha',date(q.date),96.0856,70,375,33,{...headerStyle,baseline:92.544});
+  field(p,'total',amount(q.total)+' ARS',332,582,206.0423,42,{size:18,min:10,color:rgb(0,0,0),strokeColor:rgb(0,0,0),strokeWidth:.25,align:TextAlignment.Right,baseline:607.5404});
  }else if(q.type===collectionType){
   const cover=pdf.getPage(0),proposal=pdf.getPage(8),p=pdf.getPage(9),collectionGreen=rgb(.22,.675,.384),greenStroke=cmyk(.737,0,.773,0);
   const coverStyle={size:22.1782,min:10,color:collectionGreen,strokeColor:greenStroke,strokeWidth:.21};

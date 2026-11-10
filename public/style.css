@@ -28,3 +28,5 @@ h1,h2,h3,.login-logo{font-family:'Coolvetica',Arial,sans-serif;letter-spacing:va
 .login-logo span{font-family:'Poppins',Arial,sans-serif;letter-spacing:var(--ui-tracking)}
 
 .login-logo img{display:block;width:270px;max-width:100%;height:auto;margin-inline:auto}
+
+.form-grid label[hidden]{display:none}

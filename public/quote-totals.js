@@ -1,4 +1,5 @@
 export const collectionType='Diseño de colección';
+export const monthlyType='Acompañamiento mensual';
 // Round each monetary line to cents; quantities remain positive, unit prices may be negative.
 const cents=value=>Math.sign(value)*Math.round((Math.abs(value)+Number.EPSILON)*100);
 export function quoteTotals(q){

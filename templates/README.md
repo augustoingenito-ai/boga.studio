@@ -1,12 +1,13 @@
 # Plantillas de presupuesto BOGA
 
-`design.pdf`, `branding.pdf` y `collection.pdf` son copias byte por byte de los PDF aportados por la usuaria:
+`design.pdf`, `branding.pdf`, `collection.pdf` y `monthly.pdf` son copias byte por byte de los PDF aportados por la usuaria:
 
 - PRESUPUESTO EDITABLE.pdf: A4 vertical, 595.276 × 841.89 pt, una página.
 - PRESUPUESTO BRANDING.pdf: A4 apaisado, 841.89 × 595.276 pt, doce páginas.
+- Propuesta Acompañamiento Menusal.pdf: A4 vertical, 595.276 × 841.89 pt, una página.
 - Propuesta Colección.pdf: A4 apaisado, 841.89 × 595.276 pt, doce páginas. Es la última revisión aportada de la propuesta de colección.
 
-`quote-pdf.js` copia sus páginas y agrega campos transparentes, sin reconstruir ni rasterizar el diseño. Se conservan márgenes, encabezados, gráficos, marcas de agua y fuentes originales. Los datos nuevos usan Poppins Regular; el importe de Branding y la cantidad de tipologías de Colección usan Coolvetica Regular. Todos los campos completados usan tracking −40 (−0,04 em), incluido en la medición para conservar la alineación. Las fuentes completas están incrustadas para permitir edición posterior. Ver Poppins-LICENSE.txt y [Coolvetica-SOURCE.md](Coolvetica-SOURCE.md).
+`quote-pdf.js` copia sus páginas y agrega campos transparentes, sin reconstruir ni rasterizar el diseño. Se conservan márgenes, encabezados, gráficos, marcas de agua y fuentes originales. Los datos nuevos usan Poppins Regular, salvo el encabezado de Acompañamiento mensual que conserva Sorts Mill Goudy; el importe de Branding y la cantidad de tipologías de Colección usan Coolvetica Regular. Todos los campos completados usan tracking −40 (−0,04 em), incluido en la medición para conservar la alineación. Las fuentes completas están incrustadas para permitir edición posterior. Ver Poppins-LICENSE.txt y [Coolvetica-SOURCE.md](Coolvetica-SOURCE.md).
 
 ## Diseño de colección
 
@@ -23,6 +24,20 @@ El CRM sigue preguntando si hubo asesoría y cuánto se cobró. Ese importe se d
 La referencia, el detalle de servicios, las condiciones, los adicionales y las notas se conservan internamente en el CRM. No se imprimen ni sustituyen textos de la propuesta. Las condiciones y la página de contacto del nuevo documento permanecen como en el original.
 
 `collection-base.pdf` y `collection-no-consultation-base.pdf` retiran únicamente la cantidad de ejemplo de la página 9 y los tres importes de ejemplo de la página 10, incluidos sus trazos. En la variante sin asesoría también se retiran las etiquetas de subtotal y descuento y se mueve la etiqueta TOTAL a la primera fila del bloque. El script conserva los demás operadores y recursos del diseño, sin redacciones gráficas ni rasterización.
+
+## Acompañamiento mensual
+
+`monthly.pdf` conserva el archivo adjunto byte por byte. `monthly-base.pdf` retira solamente el nombre y la fecha de ejemplo y las dos copias (relleno/trazo) del importe de ejemplo. Conserva las etiquetas Cliente, Fecha y TOTAL, todos los servicios, el horario, las condiciones de pago, los logos y las marcas de agua.
+
+El PDF final o editable siempre tiene una hoja y únicamente tres campos:
+
+- **Cliente:** nombre y marca/empresa separados por « - », si la marca está cargada y es diferente del nombre. Sorts Mill Goudy Regular de 18,5438 pt, con la posición y el color originales.
+- **Fecha:** DD/MM/AAAA, con la misma fuente y tamaño del encabezado.
+- **Total:** importe en ARS, Poppins Regular de 18 pt, negro, con el trazo original de 0,25 pt y alineación derecha en su recuadro.
+
+Los datos conservan tracking −40 y sus líneas de base originales. La fuente completa Sorts Mill Goudy se incluye para editar nombres y fechas; coincide con la fuente OFLGoudyStM del archivo. Ver [SortsMillGoudy-SOURCE.md](SortsMillGoudy-SOURCE.md) y su licencia OFL.
+
+El formulario mensual permite cargar directamente el importe. El servidor lo calcula a partir de un ítem mensual de cantidad 1 y valida cobros y total como en los demás presupuestos. No aplica asesoría, validez, cronogramas, notas ni anexos al PDF mensual. No crea facturación recurrente.
 
 ## Edición y descarga
 
@@ -43,6 +58,6 @@ El nombre del proyecto sigue omitido del formulario y de todos los PDF. Los nomb
 
 ## Preparación y validación
 
-Ejecutar `python scripts/prepare-quote-templates.py` requiere PyMuPDF solo en desarrollo. Produce las tres variantes de Diseño (`design-grid`, `design-terms`, `design-grid-terms`) y las dos de Colección, sin modificar los originales ni requerir herramientas Python en producción.
+Ejecutar `python scripts/prepare-quote-templates.py` requiere PyMuPDF solo en desarrollo. Produce las tres variantes de Diseño (`design-grid`, `design-terms`, `design-grid-terms`), las dos de Colección y `monthly-base`, sin modificar los originales ni requerir herramientas Python en producción.
 
-Las pruebas verifican descargas desde Chromium, asesoría aplicada una sola vez, precios negativos y centavos; doce páginas de colección con datos solo en las páginas 1, 9 y 10, cronograma intacto y cantidades de una a cuatro cifras; campos editables con ambas fuentes; salida final aplanada; ausencia de importes de ejemplo y contenido interno; conservación de Diseño en una hoja y Branding con sus doce páginas y anexos. La comparación rasterizada comprueba que los gráficos y las otras páginas no cambian fuera de las zonas de datos.
+Las pruebas verifican el alta, edición y descarga del presupuesto mensual con sus tres campos y fuentes; descargas desde Chromium, asesoría aplicada una sola vez, precios negativos y centavos; doce páginas de colección con datos solo en las páginas 1, 9 y 10, cronograma intacto y cantidades de una a cuatro cifras; campos editables con las fuentes de cada plantilla; salida final aplanada; ausencia de importes de ejemplo y contenido interno; conservación de Diseño en una hoja y Branding con sus doce páginas y anexos. La comparación rasterizada comprueba que los gráficos y las otras páginas no cambian fuera de las zonas de datos.
