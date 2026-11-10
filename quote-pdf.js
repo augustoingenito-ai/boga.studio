@@ -1,4 +1,4 @@
-import { PDFDocument, PDFName, TextAlignment, layoutMultilineText, layoutSinglelineText, drawTextField, setCharacterSpacing, setFillingColor, rgb, cmyk } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFArray, decodePDFRawStream, TextAlignment, layoutMultilineText, layoutSinglelineText, drawTextField, setCharacterSpacing, setFillingColor, setStrokingColor, setLineWidth, setTextRenderingMode, TextRenderingMode, rgb, cmyk } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'node:fs';
 import { designTerms, brandTerms, collectionTerms } from './public/quote-defaults.js';
@@ -43,7 +43,7 @@ export async function quotePDF(q,client,{editable=false}={}){
  form.acroForm.dict.set(PDFName.of('DR'),pdf.context.obj({Font:Object.fromEntries([font,coolvetica].filter(Boolean).map(f=>[f.name,f.ref]))}));
  const charsets=new Map([font,coolvetica].filter(Boolean).map(f=>[f,new Set(f.getCharacterSet())]));
  const validateText=(text,typeface=font)=>{for(const char of text)if(char!=='\n'&&!charsets.get(typeface).has(char.codePointAt(0)))throw Object.assign(new Error(`El presupuesto contiene caracteres que ${typeface===font?'Poppins':'Coolvetica'} no puede representar (por ejemplo emojis). Revisá los datos antes de descargar.`),{status:422});};
- function field(page,name,value,x,top,width,height,{size=12,min=8,color=ink,align=TextAlignment.Left,multiline=false,maxChars=0,overflowTitle='Detalle completo',baseline,typeface=font}={}){
+ function field(page,name,value,x,top,width,height,{size=12,min=8,color=ink,align=TextAlignment.Left,multiline=false,maxChars=0,overflowTitle='Detalle completo',baseline,typeface=font,strokeColor,strokeWidth=0}={}){
   const trackedFont=withTracking(typeface);
   const fullText=clean(value);let text=fullText,overflowed=false;validateText(text,typeface);const overflow=()=>{if(singlePage||collection)throw Object.assign(new Error(collection?'La información no entra en el espacio de la plantilla con tamaño legible. Acortá esos datos y volvé a descargar.':'La información no entra en una hoja con tamaño legible. Acortá las descripciones o agrupá servicios y volvé a descargar.'),{status:422});if(!overflowed){annex.push([overflowTitle,fullText]);overflowed=true;}};
   if(maxChars&&text.length>maxChars){overflow();text=text.slice(0,maxChars-20)+'… (ver anexo)';}
@@ -53,7 +53,7 @@ export async function quotePDF(q,client,{editable=false}={}){
   if(multiline){const fits=()=>layoutMultilineText(text,{alignment:align,font:trackedFont,fontSize:actual,bounds:{x:1,y:1,width:width-2,height:height-2}}).lines.every(l=>l.y>=0&&l.width<=width-2);while(actual>min&&!fits())actual=Math.max(min,actual-.5);if(!fits()){overflow();while(text.length&&!fits())text=text.slice(0,-1);text=text.slice(0,-18)+'… (ver anexo)';while(text.length>18&&!fits())text=text.slice(0,-19)+'… (ver anexo)';}}
   let f=fields.get(name);if(!f){f=form.createTextField(name);if(multiline)f.enableMultiline();f.setAlignment(align);f.setText(text);f.acroField.setDefaultAppearance(`/${typeface.name} ${actual} Tf 0 g`);f.setFontSize(actual);fields.set(name,f);}
   f.addToPage(page,{x,y:page.getHeight()-top-height,width,height,font:typeface,textColor:color,backgroundColor:undefined,borderColor:undefined,borderWidth:0});
-  styles.set(name,{size:actual,color,typeface,baseline:baseline===undefined?undefined:top+height-baseline});
+  styles.set(name,{size:actual,color,typeface,strokeColor,strokeWidth,baseline:baseline===undefined?undefined:top+height-baseline});
   return f;
  }
  if(q.type==='Diseño'){
@@ -82,17 +82,23 @@ export async function quotePDF(q,client,{editable=false}={}){
   field(p,'total',cash(q.total),43,447,506,33,{size:22,align:TextAlignment.Right});
   if(customTerms||compactNotes){const parts=[q.terms||designTerms];if(q.schedule)parts.push('Cronograma y adicionales: '+q.schedule);if(q.description)parts.push('Observaciones: '+q.description);field(p,'condiciones_y_notas',parts.join('\n\n'),39,530,518,178,{size:9,min:7,multiline:true});}
  }else if(q.type===collectionType){
-  const cover=pdf.getPage(0),p=pdf.getPage(7),collectionGreen=cmyk(.737,0,.773,0),collectionCream=cmyk(.043,.035,.102,0);
-  field(cover,'cliente',client.name,48,365,560,33,{size:22,color:collectionGreen});
-  field(cover,'fecha',q.date?'Fecha: '+date(q.date):'',48,459,240,23,{size:12,color:collectionGreen});
-  field(cover,'validez',q.validityText?'Validez: '+q.validityText:q.validUntil?'Validez: '+date(q.validUntil):'',300,459,310,23,{size:12,color:collectionGreen});
-  const timeline=Array.isArray(q.timeline)?q.timeline:[];
-  ['investigacion','diseno','devolucion','entrega','revision_final'].forEach((name,i)=>field(p,name,timeline[i]||'',292,[183,233,284,335,386][i],218,39,{size:15,color:collectionCream,align:TextAlignment.Right,baseline:[205.6901,255.8237,306.7799,357.7399,408.7][i]}));
+  const cover=pdf.getPage(0),proposal=pdf.getPage(8),p=pdf.getPage(9),collectionGreen=rgb(.22,.675,.384),greenStroke=cmyk(.737,0,.773,0);
+  const coverStyle={size:22.1782,min:10,color:collectionGreen,strokeColor:greenStroke,strokeWidth:.21};
+  field(cover,'cliente',client.name,164,443,470,42,{...coverStyle,baseline:469.527});
+  field(cover,'fecha',date(q.date),164,475,470,42,{...coverStyle,baseline:501.527});
+  field(cover,'validez',q.validityText||date(q.validUntil),164,507,470,42,{...coverStyle,baseline:533.527});
+  const typologies=String(q.collectionTypologies||''),suffixX=258.0695+withTracking(coolvetica).widthOfTextAtSize(typologies,22.0132);
+  const contents=proposal.node.Contents(),streams=contents instanceof PDFArray?contents.asArray():[contents];
+  const content=streams.map(stream=>Buffer.from(decodePDFRawStream(pdf.context.lookup(stream)).decode()).toString('latin1')).join('\n');
+  const suffixMatrix='22.0132 0 0 22.0132 268.7899 381.3359 Tm';
+  if(content.split(suffixMatrix).length!==2)throw new Error('La plantilla de colección no contiene el espacio de tipologías esperado.');
+  proposal.node.set(PDFName.of('Contents'),pdf.context.register(pdf.context.flateStream(Buffer.from(content.replace(suffixMatrix,`22.0132 0 0 22.0132 ${suffixX.toFixed(6)} 381.3359 Tm`),'latin1'))));
+  field(proposal,'tipologias',typologies,257.0695,190,47,32,{size:22.0132,min:22.0132,color:rgb(0,0,0),typeface:coolvetica,baseline:213.9401});
   if(q.hadConsultation===true){
-   field(p,'subtotal',amount(q.subtotal),610,437,139,43,{size:33.4068,min:14,color:collectionCream,align:TextAlignment.Right,typeface:coolvetica,baseline:470.8502});
-   field(p,'descuento_asesoria',amount(q.consultationDiscount),610,475,139,43,{size:33.4068,min:14,color:collectionCream,align:TextAlignment.Right,typeface:coolvetica,baseline:509.3014});
+   field(p,'subtotal',amount(q.subtotal)+' ARS',565,438,211,43,{size:23.07,min:12,color:rgb(0,0,0),strokeColor:cmyk(.906,.785,.617,.969),strokeWidth:.32,align:TextAlignment.Right,baseline:467.11});
+   field(p,'descuento_asesoria','- '+amount(q.consultationDiscount)+' ARS',565,471,211,43,{size:23.07,min:12,color:rgb(.89,.145,.18),strokeColor:cmyk(.012,.941,.809,0),strokeWidth:.32,align:TextAlignment.Right,baseline:499.7809});
   }
-  field(p,'total',amount(q.total),610,515,139,46,{size:33.4068,min:14,color:collectionGreen,align:TextAlignment.Right,typeface:coolvetica,baseline:549.0889});
+  field(p,'total',amount(q.total)+' ARS',565,q.hadConsultation===true?506:438,211,43,{size:23.07,min:12,color:collectionGreen,strokeColor:greenStroke,strokeWidth:.32,align:TextAlignment.Right,baseline:q.hadConsultation===true?535.0045:467.11});
  }else{
   const p=pdf.getPage(0);
   field(p,'fecha',q.date?'Fecha: '+date(q.date):'',48,459,240,23,{size:12,color:green});
@@ -120,14 +126,15 @@ export async function quotePDF(q,client,{editable=false}={}){
   }
  }
  for(const [name,f] of fields){
-  const {size,color,baseline,typeface}=styles.get(name),trackedFont=withTracking(typeface);
+  const {size,color,baseline,typeface,strokeColor,strokeWidth}=styles.get(name),trackedFont=withTracking(typeface);
   f.updateAppearances(typeface,(textField,widget)=>{
    const {width,height}=widget.getRectangle(),bounds={x:1,y:1,width:width-2,height:height-2};
    const options={alignment:textField.getAlignment(),font:trackedFont,fontSize:size,bounds};
    const textLines=textField.isMultiline()?layoutMultilineText(textField.getText()||'',options).lines:[layoutSinglelineText(textField.getText()||'',options).line];
    if(baseline!==undefined)textLines[0].y=baseline;
    const appearance=drawTextField({x:0,y:0,width,height,borderWidth:0,textColor:color,font:typeface.name,fontSize:size,textLines,padding:1});
-   const operators=appearance.flatMap(op=>op.name==='BT'?[op,setCharacterSpacing(tracking*size)]:[op]);
+   const stroke=strokeColor?[setStrokingColor(strokeColor),setLineWidth(strokeWidth),setTextRenderingMode(TextRenderingMode.FillAndOutline)]:[];
+   const operators=appearance.flatMap(op=>op.name==='BT'?[op,...stroke,setCharacterSpacing(tracking*size)]:[op]);
    const da=`/${typeface.name} ${size} Tf ${setFillingColor(color)} ${tracking*size} Tc`;
    textField.acroField.setDefaultAppearance(da);widget.setDefaultAppearance(da);
    return operators;

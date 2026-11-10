@@ -4,24 +4,25 @@
 
 - PRESUPUESTO EDITABLE.pdf: A4 vertical, 595.276 × 841.89 pt, una página.
 - PRESUPUESTO BRANDING.pdf: A4 apaisado, 841.89 × 595.276 pt, doce páginas.
-- Propuesta Colección.pdf: A4 apaisado, 841.89 × 595.276 pt, diez páginas. Reemplaza la propuesta vertical anterior de colección.
+- Propuesta Colección.pdf: A4 apaisado, 841.89 × 595.276 pt, doce páginas. Es la última revisión aportada de la propuesta de colección.
 
-`quote-pdf.js` copia sus páginas y agrega campos transparentes, sin reconstruir ni rasterizar el diseño. Se conservan márgenes, encabezados, gráficos, marcas de agua y fuentes originales. Los datos nuevos usan Poppins Regular; el importe de Branding y los importes de Colección usan Coolvetica Regular. Todos los campos completados usan tracking −40 (−0,04 em), incluido en la medición para conservar la alineación. Las fuentes completas están incrustadas para permitir edición posterior. Ver Poppins-LICENSE.txt y [Coolvetica-SOURCE.md](Coolvetica-SOURCE.md).
+`quote-pdf.js` copia sus páginas y agrega campos transparentes, sin reconstruir ni rasterizar el diseño. Se conservan márgenes, encabezados, gráficos, marcas de agua y fuentes originales. Los datos nuevos usan Poppins Regular; el importe de Branding y la cantidad de tipologías de Colección usan Coolvetica Regular. Todos los campos completados usan tracking −40 (−0,04 em), incluido en la medición para conservar la alineación. Las fuentes completas están incrustadas para permitir edición posterior. Ver Poppins-LICENSE.txt y [Coolvetica-SOURCE.md](Coolvetica-SOURCE.md).
 
 ## Diseño de colección
 
-La propuesta conserva exactamente sus diez páginas, sin anexos ni contenido adicional:
+La propuesta conserva exactamente sus doce páginas, sin anexos ni contenido adicional. Solo se completan tres páginas:
 
-- **Portada:** nombre del cliente, fecha y validez, en Poppins y el verde del archivo, según lo confirmado por la usuaria.
-- **Página 8:** cinco renglones del cronograma (Investigación, Diseño, Devolución, Entrega y Revisión final) y valor del proyecto. Los importes usan Coolvetica Regular y el ARS original; no se agrega un signo monetario adicional.
-- **Con asesoría:** subtotal, descuento por asesoría y total. El subtotal y el descuento usan la tinta clara del original; el total conserva su verde. Los importes comparten borde derecho y las líneas de base de los ejemplos originales.
-- **Sin asesoría:** solo el total, en el verde del PDF elegido expresamente por la usuaria. Se omiten subtotal, descuento y los indicadores ARS de esas filas.
+- **Página 1, portada:** nombre del cliente, fecha y validez, junto a sus etiquetas originales, en Poppins y el verde del archivo.
+- **Página 9:** la cantidad manual de tipologías reemplaza el 6 de ejemplo en «Creación integral de … tipologías con variante de color e identidad estética.». Usa Coolvetica Regular del tamaño original; el resto de la frase se desplaza según el ancho del número, sin cambiar sus palabras ni superponer el texto.
+- **Página 10:** valor del proyecto en Poppins Regular, con el indicador ARS. Con asesoría se muestran subtotal negro, descuento rojo y total verde; sin asesoría, solo el total verde en la primera fila del bloque. Los importes comparten borde derecho y respetan las líneas de base originales.
+
+Los datos conservan los colores de relleno y trazo y los grosores del archivo. La página 8, incluido su cronograma, y las páginas 2–7 y 11–12 permanecen intactas.
 
 El CRM sigue preguntando si hubo asesoría y cuánto se cobró. Ese importe se descuenta una sola vez del subtotal, incluso al editar repetidamente; no se registra como cobro del nuevo presupuesto. Los servicios admiten precios negativos con cantidades positivas. El total neto no puede ser negativo y determina el límite de los cobros.
 
-La referencia, la cantidad de tipologías acordadas, el detalle de servicios, las condiciones, los adicionales y las notas se conservan internamente en el CRM. No se imprimen ni sustituyen textos de la propuesta nueva. No se recupera la frase de tipologías de la plantilla anterior. Las condiciones y la página de contacto del nuevo documento permanecen como en el original.
+La referencia, el detalle de servicios, las condiciones, los adicionales y las notas se conservan internamente en el CRM. No se imprimen ni sustituyen textos de la propuesta. Las condiciones y la página de contacto del nuevo documento permanecen como en el original.
 
-`collection-base.pdf` y `collection-no-consultation-base.pdf` retiran únicamente los tres importes de ejemplo de la página 8. En la variante sin asesoría también se retiran sus etiquetas y monedas sobrantes. El script conserva los operadores de posición para mantener las etiquetas restantes y el resto del diseño intactos. Las tintas de los campos se expresan en el CMYK original para conservar la apariencia sobre el fondo oscuro.
+`collection-base.pdf` y `collection-no-consultation-base.pdf` retiran únicamente la cantidad de ejemplo de la página 9 y los tres importes de ejemplo de la página 10, incluidos sus trazos. En la variante sin asesoría también se retiran las etiquetas de subtotal y descuento y se mueve la etiqueta TOTAL a la primera fila del bloque. El script conserva los demás operadores y recursos del diseño, sin redacciones gráficas ni rasterización.
 
 ## Edición y descarga
 
@@ -44,4 +45,4 @@ El nombre del proyecto sigue omitido del formulario y de todos los PDF. Los nomb
 
 Ejecutar `python scripts/prepare-quote-templates.py` requiere PyMuPDF solo en desarrollo. Produce las tres variantes de Diseño (`design-grid`, `design-terms`, `design-grid-terms`) y las dos de Colección, sin modificar los originales ni requerir herramientas Python en producción.
 
-Las pruebas verifican descargas desde Chromium, asesoría aplicada una sola vez, precios negativos y centavos; diez páginas de colección con importes y cronograma en la página 8 y datos en portada; campos editables con ambas fuentes; salida final aplanada; ausencia de importes de ejemplo y contenido interno; conservación de Diseño en una hoja y Branding con sus doce páginas y anexos. La comparación rasterizada comprueba que los gráficos y las otras páginas no cambian fuera de las zonas de datos.
+Las pruebas verifican descargas desde Chromium, asesoría aplicada una sola vez, precios negativos y centavos; doce páginas de colección con datos solo en las páginas 1, 9 y 10, cronograma intacto y cantidades de una a cuatro cifras; campos editables con ambas fuentes; salida final aplanada; ausencia de importes de ejemplo y contenido interno; conservación de Diseño en una hoja y Branding con sus doce páginas y anexos. La comparación rasterizada comprueba que los gráficos y las otras páginas no cambian fuera de las zonas de datos.
