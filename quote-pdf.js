@@ -1,14 +1,15 @@
-import { PDFDocument, PDFName, TextAlignment, layoutMultilineText, layoutSinglelineText, drawTextField, setCharacterSpacing, setFillingColor, rgb } from 'pdf-lib';
+import { PDFDocument, PDFName, TextAlignment, layoutMultilineText, layoutSinglelineText, drawTextField, setCharacterSpacing, setFillingColor, rgb, cmyk } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'node:fs';
 import { designTerms, brandTerms, collectionTerms } from './public/quote-defaults.js';
 import {quoteTotals,collectionType} from './public/quote-totals.js';
 const original={Diseño:readFileSync(new URL('./templates/design.pdf',import.meta.url)),Branding:readFileSync(new URL('./templates/branding.pdf',import.meta.url)),[collectionType]:readFileSync(new URL('./templates/collection.pdf',import.meta.url))};
-const variants=Object.fromEntries(['design-grid','design-terms','design-grid-terms','collection-base','collection-terms','collection-no-consultation-base','collection-no-consultation-terms'].map(name=>[name,readFileSync(new URL('./templates/'+name+'.pdf',import.meta.url))]));
+const variants=Object.fromEntries(['design-grid','design-terms','design-grid-terms','collection-base','collection-no-consultation-base'].map(name=>[name,readFileSync(new URL('./templates/'+name+'.pdf',import.meta.url))]));
 const fontBytes=readFileSync(new URL('./templates/Poppins-Regular.ttf',import.meta.url));
 const coolveticaBytes=readFileSync(new URL('./templates/Coolvetica-Regular.otf',import.meta.url));
 const ink=rgb(35/255,31/255,32/255),white=rgb(246/255,243/255,233/255),green=rgb(56/255,172/255,98/255),pink=rgb(241/255,200/255,216/255);
 const cash=n=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',minimumFractionDigits:0,maximumFractionDigits:2}).format(n||0).replace(/\u00a0/g,' ');
+const amount=n=>new Intl.NumberFormat('es-AR',{minimumFractionDigits:0,maximumFractionDigits:2}).format(n||0);
 const clean=v=>String(v??'').replace(/\r\n/g,'\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
 const date=v=>v&&/^\d{4}-\d{2}-\d{2}$/.test(v)?v.split('-').reverse().join('/'):clean(v);
 // Illustrator tracking -40 = -40/1000 em, scaled with each field's font size.
@@ -16,18 +17,18 @@ const tracking=-40/1000;
 export async function quotePDF(q,client,{editable=false}={}){
  if(!original[q.type])throw Object.assign(new Error('Seleccioná una plantilla de presupuesto válida.'),{status:400});
  q={...q,...quoteTotals(q)};
- const singlePage=q.type!=='Branding';
+ const singlePage=q.type==='Diseño',collection=q.type===collectionType;
  const expectedTerms=q.type==='Branding'?brandTerms:q.type===collectionType?collectionTerms:designTerms;
  const customTerms=!!(q.terms&&q.terms!==expectedTerms),compactNotes=!!(q.schedule||q.description);
  let source=original[q.type];
  if(q.type==='Diseño'){const grid=q.items.length>2,terms=customTerms||compactNotes;if(grid||terms)source=variants['design'+(grid?'-grid':'')+(terms?'-terms':'')];}
- if(q.type===collectionType)source=variants['collection'+(q.hadConsultation===true?'':'-no-consultation')+(customTerms?'-terms':'-base')];
+ if(collection)source=variants[q.hadConsultation===true?'collection-base':'collection-no-consultation-base'];
  const pdf=await PDFDocument.create();pdf.registerFontkit(fontkit);
  const template=await PDFDocument.load(source);
  const copies=1;
  for(let i=0;i<copies;i++)for(const page of await pdf.copyPages(template,template.getPageIndices()))pdf.addPage(page);
  const font=await pdf.embedFont(fontBytes,{subset:false});
- const coolvetica=q.type==='Branding'?await pdf.embedFont(coolveticaBytes,{subset:false}):undefined;
+ const coolvetica=q.type==='Branding'||collection?await pdf.embedFont(coolveticaBytes,{subset:false}):undefined;
  const form=pdf.getForm(),fields=new Map(),styles=new Map(),annex=[];
  const trackedFonts=new Map();
  function withTracking(typeface){
@@ -44,7 +45,7 @@ export async function quotePDF(q,client,{editable=false}={}){
  const validateText=(text,typeface=font)=>{for(const char of text)if(char!=='\n'&&!charsets.get(typeface).has(char.codePointAt(0)))throw Object.assign(new Error(`El presupuesto contiene caracteres que ${typeface===font?'Poppins':'Coolvetica'} no puede representar (por ejemplo emojis). Revisá los datos antes de descargar.`),{status:422});};
  function field(page,name,value,x,top,width,height,{size=12,min=8,color=ink,align=TextAlignment.Left,multiline=false,maxChars=0,overflowTitle='Detalle completo',baseline,typeface=font}={}){
   const trackedFont=withTracking(typeface);
-  const fullText=clean(value);let text=fullText,overflowed=false;validateText(text,typeface);const overflow=()=>{if(singlePage)throw Object.assign(new Error('La información no entra en una hoja con tamaño legible. Acortá las descripciones o agrupá servicios y volvé a descargar.'),{status:422});if(!overflowed){annex.push([overflowTitle,fullText]);overflowed=true;}};
+  const fullText=clean(value);let text=fullText,overflowed=false;validateText(text,typeface);const overflow=()=>{if(singlePage||collection)throw Object.assign(new Error(collection?'La información no entra en el espacio de la plantilla con tamaño legible. Acortá esos datos y volvé a descargar.':'La información no entra en una hoja con tamaño legible. Acortá las descripciones o agrupá servicios y volvé a descargar.'),{status:422});if(!overflowed){annex.push([overflowTitle,fullText]);overflowed=true;}};
   if(maxChars&&text.length>maxChars){overflow();text=text.slice(0,maxChars-20)+'… (ver anexo)';}
   let actual=size;
   const longest=Math.max(0,...text.split('\n').map(t=>trackedFont.widthOfTextAtSize(t,actual)));
@@ -81,17 +82,17 @@ export async function quotePDF(q,client,{editable=false}={}){
   field(p,'total',cash(q.total),43,447,506,33,{size:22,align:TextAlignment.Right});
   if(customTerms||compactNotes){const parts=[q.terms||designTerms];if(q.schedule)parts.push('Cronograma y adicionales: '+q.schedule);if(q.description)parts.push('Observaciones: '+q.description);field(p,'condiciones_y_notas',parts.join('\n\n'),39,530,518,178,{size:9,min:7,multiline:true});}
  }else if(q.type===collectionType){
-  const p=pdf.getPage(0);
-  field(p,'cliente',client.name,99,39,320,24,{size:14});
-  field(p,'fecha',date(q.date),99,61,320,23,{size:14});
-  field(p,'validez',q.validityText||date(q.validUntil),99,82,320,23,{size:14});
-  field(p,'tipologias',String(q.collectionTypologies||''),154,169,26,22,{size:12,min:8,align:TextAlignment.Center,baseline:185.5961});
-  if(q.hadConsultation===true)field(p,'subtotal',cash(q.subtotal),288,589,254,29,{size:18,color:rgb(0,0,0),align:TextAlignment.Right,baseline:610.9154});
-  if(q.hadConsultation===true)field(p,'descuento_asesoria',cash(-q.consultationDiscount),288,617,254,27,{size:18,color:rgb(211/255,47/255,47/255),align:TextAlignment.Right,baseline:636.3998});
-  field(p,'total',cash(q.total),288,q.hadConsultation===true?645:589,254,q.hadConsultation===true?28:29,{size:20,color:q.hadConsultation===true?rgb(6/255,178/255,109/255):rgb(0,0,0),align:TextAlignment.Right,baseline:q.hadConsultation===true?663.8841:610.9154});
-  field(p,'referencia',q.number,32,754,190,20,{size:9});
-  if(customTerms)field(p,'condiciones_particulares',q.terms,51,702,510,22,{size:9,min:7,multiline:true});
-  if(compactNotes)field(p,'notas',[q.schedule,q.description].filter(Boolean).join('\n'),49,545,500,36,{size:8,min:6.5,multiline:true});
+  const cover=pdf.getPage(0),p=pdf.getPage(7),collectionGreen=cmyk(.737,0,.773,0),collectionCream=cmyk(.043,.035,.102,0);
+  field(cover,'cliente',client.name,48,365,560,33,{size:22,color:collectionGreen});
+  field(cover,'fecha',q.date?'Fecha: '+date(q.date):'',48,459,240,23,{size:12,color:collectionGreen});
+  field(cover,'validez',q.validityText?'Validez: '+q.validityText:q.validUntil?'Validez: '+date(q.validUntil):'',300,459,310,23,{size:12,color:collectionGreen});
+  const timeline=Array.isArray(q.timeline)?q.timeline:[];
+  ['investigacion','diseno','devolucion','entrega','revision_final'].forEach((name,i)=>field(p,name,timeline[i]||'',292,[183,233,284,335,386][i],218,39,{size:15,color:collectionCream,align:TextAlignment.Right,baseline:[205.6901,255.8237,306.7799,357.7399,408.7][i]}));
+  if(q.hadConsultation===true){
+   field(p,'subtotal',amount(q.subtotal),610,437,139,43,{size:33.4068,min:14,color:collectionCream,align:TextAlignment.Right,typeface:coolvetica,baseline:470.8502});
+   field(p,'descuento_asesoria',amount(q.consultationDiscount),610,475,139,43,{size:33.4068,min:14,color:collectionCream,align:TextAlignment.Right,typeface:coolvetica,baseline:509.3014});
+  }
+  field(p,'total',amount(q.total),610,515,139,46,{size:33.4068,min:14,color:collectionGreen,align:TextAlignment.Right,typeface:coolvetica,baseline:549.0889});
  }else{
   const p=pdf.getPage(0);
   field(p,'fecha',q.date?'Fecha: '+date(q.date):'',48,459,240,23,{size:12,color:green});
@@ -103,9 +104,9 @@ export async function quotePDF(q,client,{editable=false}={}){
   const investment=q.items.map(i=>`${i.service} · ${i.quantity} × ${cash(i.price)}`).join('\n');
   field(pdf.getPage(9),'servicios','Servicios incluidos en este presupuesto:\n\n'+investment,536,330,262,210,{size:11,color:pink,multiline:true,maxChars:700,overflowTitle:'Detalle de servicios'});
  }
- if(!singlePage&&q.terms&&q.terms!==expectedTerms)annex.push(['Condiciones particulares',q.terms]);
- if(!singlePage&&q.schedule)annex.push(['Cronograma y adicionales',q.schedule]);
- if(!singlePage&&q.description)annex.push(['Observaciones del proyecto',q.description]);
+ if(q.type==='Branding'&&q.terms&&q.terms!==expectedTerms)annex.push(['Condiciones particulares',q.terms]);
+ if(q.type==='Branding'&&q.schedule)annex.push(['Cronograma y adicionales',q.schedule]);
+ if(q.type==='Branding'&&q.description)annex.push(['Observaciones del proyecto',q.description]);
  if(annex.length){
   const [w,h]=q.type==='Diseño'?[595.276,841.89]:[841.89,595.276];
   let page,top;

@@ -17,34 +17,24 @@ for grid,terms,name in [(True,False,'design-grid'),(False,True,'design-terms'),(
         assert count==1,(obj,count)
     xref=doc.get_new_xref();doc.update_object(xref,'<<>>');doc.update_stream(xref,content)
     page.set_contents(xref);doc.save(ROOT/(name+'.pdf'),garbage=4,deflate=True)
-for custom_terms,no_consultation,name in [(False,False,'collection-base'),(True,False,'collection-terms'),(False,True,'collection-no-consultation-base'),(True,True,'collection-no-consultation-terms')]:
-    doc=fitz.open(ROOT/'collection.pdf');page=doc[0]
-    # Replace the underscore glyphs with their exact text advance. The number
-    # keeps its original position without painting over the translucent artwork.
-    spans=[span for block in page.get_text('rawdict')['blocks'] for line in block.get('lines',[]) for span in line['spans']]
-    span=next(span for span in spans if '_________' in ''.join(c['c'] for c in span['chars']))
-    chars=span['chars'];start=''.join(c['c'] for c in chars).index('_________')
-    advance=chars[start+9]['origin'][0]-chars[start]['origin'][0]
-    adjustment=-advance/span['size']*1000
+# New collection proposal: preserve all 10 original pages and clear only the
+# sample amounts on page 8. All coordinates, artwork and static fonts stay intact.
+for no_consultation,name in [(False,'collection-base'),(True,'collection-no-consultation-base')]:
+    doc=fitz.open(ROOT/'collection.pdf');page=doc[7]
     content=page.read_contents()
-    assert content.count(b'(e _________  ti)')==1
-    content=content.replace(b'(e _________  ti)',f'(e ) {adjustment:.6f} (  ti)'.encode())
-    if custom_terms:
-        content,count=re.subn(rb'/Fm3\s+Do\b',b'',content);assert count==1
+    samples=[b'[(350)31 (.)31 (000    )]TJ',b'[(40)31 (.)31 (000)]TJ',b'[(3)10 (10)31 (.)31 (000)]TJ']
+    for sample in samples:
+        assert content.count(sample)==1,sample
+        content=content.replace(sample,b'[]TJ')
     if no_consultation:
-        # Illustrator paints each label twice (fill and stroke). Remove both
-        # subtotal and advisory while preserving clipping/graphics state.
-        blocks=list(re.finditer(rb'BT\b[\s\S]*?\bET\b',content))
-        hidden=[block for block in blocks if b'(DESCUENTO POR ASESOR\\315A)' in block.group() or b'(SUBTOTAL)' in block.group()]
-        assert len(hidden)==4
-        for block in reversed(hidden):content=content[:block.start()]+content[block.end():]
-        # Place TOTAL on the first line and shorten the original border by the
-        # same amount. Keep all artwork outside the box intact.
-        assert content.count(b'52.2881 178.0059 Tm')==2
-        content=content.replace(b'52.2881 178.0059 Tm',b'52.2881 230.9746 Tm')
-        border=next(row[0] for row in page.get_xobjects() if row[1]=='Fm1')
-        border_content=doc.xref_stream(border)
-        assert border_content.count(b'558.531 165.217 -521.787 94.063 re')==1
-        doc.update_stream(border,border_content.replace(b'558.531 165.217 -521.787 94.063 re',b'558.531 218.1857 -521.787 41.0943 re'))
+        labels=[b'[(SUB)23 (T)31 (O)61 (T)173 (AL)]TJ',b'[(DES)8 (CUENT)30.9 (O POR A)31 (SES)8 (OR\\315A)]TJ']
+        for label in labels:
+            assert content.count(label)==1,label
+            content=content.replace(label,b'[]TJ')
+        # Preserve text advances and the last ARS label beside TOTAL. Only the
+        # subtotal/advisory currency labels disappear, along with their amounts.
+        currency=b'[(A)-7 (RS)]TJ'
+        assert content.count(currency)==3
+        content=content.replace(currency,b'[]TJ',2)
     xref=doc.get_new_xref();doc.update_object(xref,'<<>>');doc.update_stream(xref,content)
     page.set_contents(xref);doc.save(ROOT/(name+'.pdf'),garbage=4,deflate=True)
